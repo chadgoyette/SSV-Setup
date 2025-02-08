@@ -67,40 +67,121 @@ audio:
   channels: 1
 EOL
 
-# Ensure old Wyoming Satellite service file is removed before creating a new one
-if [ -f "/etc/systemd/system/wyoming-satellite.service" ]; then
-    sudo systemctl stop wyoming-satellite || true
-    sudo systemctl disable wyoming-satellite || true
-    sudo rm -f /etc/systemd/system/wyoming-satellite.service
-    sudo systemctl daemon-reload
+# Remove existing Wyoming Satellite service file if it exists
+SERVICE_FILE="/etc/systemd/system/wyoming-satellite.service"
+if [ -f "$SERVICE_FILE" ]; then
+    sudo rm "$SERVICE_FILE"
 fi
 
-# Create a new systemd service for Wyoming Satellite
-SERVICE_FILE="/etc/systemd/system/wyoming-satellite.service"
+# Create a new Wyoming Satellite service file
 cat <<EOL | sudo tee "$SERVICE_FILE"
 [Unit]
-Description=Wyoming Satellite Service
-After=network.target
+Description=Wyoming Satellite
+Wants=network-online.target
+After=network-online.target
+Requires=wyoming-openwakeword.service
+Requires=2mic_leds.service
 
 [Service]
-ExecStart=/home/$USERNAME/wyoming-satellite/venv/bin/python -m wyoming_satellite
+Type=simple
+ExecStart=/home/$USERNAME/wyoming-satellite/script/run \
+  --name '$USERNAME' \
+  --uri 'tcp://0.0.0.0:10700' \
+  --mic-command 'arecord -D plughw:CARD=seeed2micvoicec,DEV=0 -r 16000 -c 1 -f S16_LE -t raw' \
+  --snd-command 'aplay -D plughw:CARD=seeed2micvoicec,DEV=0 -r 22050 -c 1 -f S16_LE -t raw' \
+  --wake-uri 'tcp://127.0.0.1:10400' \
+  --wake-word-name 'hey_jarvis' \
+  --event-uri 'tcp://127.0.0.1:10500'
 WorkingDirectory=/home/$USERNAME/wyoming-satellite
 Restart=always
-User=$USERNAME
+RestartSec=1
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOL
 
-# Reload systemd and enable the updated Wyoming Satellite service
+# Step: Install Local Wake Word Detection (openWakeWord)
+echo "Installing local wake word detection (openWakeWord)..."
+
+# Install necessary dependencies
+sudo apt-get update
+sudo apt-get install --no-install-recommends -y libopenblas-dev
+
+# Clone and set up openWakeWord
+if [ ! -d "$HOME/wyoming-openwakeword" ]; then
+    git clone https://github.com/rhasspy/wyoming-openwakeword.git ~/wyoming-openwakeword
+fi
+
+cd ~/wyoming-openwakeword || exit
+script/setup
+
+# Remove existing Wyoming OpenWakeWord service file if it exists
+WAKEWORD_SERVICE_FILE="/etc/systemd/system/wyoming-openwakeword.service"
+if [ -f "$WAKEWORD_SERVICE_FILE" ]; then
+    sudo rm "$WAKEWORD_SERVICE_FILE"
+fi
+
+# Create systemd service for openWakeWord
+cat <<EOL | sudo tee "$WAKEWORD_SERVICE_FILE"
+[Unit]
+Description=Wyoming openWakeWord
+
+[Service]
+Type=simple
+ExecStart=/home/$USERNAME/wyoming-openwakeword/script/run --uri 'tcp://127.0.0.1:10400'
+WorkingDirectory=/home/$USERNAME/wyoming-openwakeword
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=default.target
+EOL
+
+# Step: Install and Configure LED Service for ReSpeaker 2Mic HAT
+echo "Setting up LED service for ReSpeaker 2Mic HAT..."
+
+# Navigate to the Wyoming Satellite examples directory
+cd ~/wyoming-satellite/examples || exit
+
+# Set up a Python virtual environment for the LED service
+python3 -m venv --system-site-packages .venv
+.venv/bin/pip3 install --upgrade pip
+.venv/bin/pip3 install --upgrade wheel setuptools
+.venv/bin/pip3 install 'wyoming==1.5.2'
+
+# Install additional dependencies if required
+sudo apt-get install -y python3-spidev python3-gpiozero
+
+# Test the service to ensure it runs correctly
+.venv/bin/python3 2mic_service.py --help
+
+# Remove existing LED service file if it exists
+LED_SERVICE_FILE="/etc/systemd/system/2mic_leds.service"
+if [ -f "$LED_SERVICE_FILE" ]; then
+    sudo rm "$LED_SERVICE_FILE"
+fi
+
+# Create systemd service for LED control
+cat <<EOL | sudo tee "$LED_SERVICE_FILE"
+[Unit]
+Description=2Mic LEDs
+
+[Service]
+Type=simple
+ExecStart=/home/$USERNAME/wyoming-satellite/examples/.venv/bin/python3 2mic_service.py --uri 'tcp://127.0.0.1:10500'
+WorkingDirectory=/home/$USERNAME/wyoming-satellite/examples
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=default.target
+EOL
+
+
+# Reload systemd and restart the service
 sudo systemctl daemon-reload
 sudo systemctl enable wyoming-satellite
 sudo systemctl restart wyoming-satellite
-
-# Reload systemd, enable and start Wyoming Satellite
-sudo systemctl daemon-reload
-sudo systemctl enable wyoming-satellite
-sudo systemctl start wyoming-satellite
 
 echo "===== Wyoming Satellite Installation Complete ====="
 
