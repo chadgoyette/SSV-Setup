@@ -19,30 +19,30 @@ sudo mkswap /swapfile
 sudo swapon /swapfile
 sudo bash -c 'echo "/swapfile none swap sw 0 0" >> /etc/fstab'
 
-# Step 1: Install Wyoming Satellite
+# Step 1: Install Wyoming Satellite (Following the Official Tutorial)
+echo "===== Installing Wyoming Satellite ====="
+
+# Ensure dependencies are installed
+sudo apt install -y python3 python3-venv python3-pip portaudio19-dev flac
+
+# Clone the Wyoming Satellite repository
 if [ ! -d "$HOME/wyoming-satellite" ]; then
     echo "Cloning Wyoming Satellite repository..."
     git clone https://github.com/rhasspy/wyoming-satellite.git ~/wyoming-satellite
 fi
+
+# Navigate into the directory
 cd ~/wyoming-satellite || exit
 
-# Install system dependencies
-sudo apt install -y python3 python3-venv python3-pip portaudio19-dev flac
-
-# Install and enable ReSpeaker 2-Mic HAT driver
-if [ ! -d "/usr/share/seeed_voicecard" ]; then
-    echo "Installing ReSpeaker 2-Mic HAT driver..."
-    git clone --depth=1 https://github.com/respeaker/seeed-voicecard.git
-    cd seeed-voicecard || exit
-    sudo ./install.sh
-    cd ..
-    rm -rf seeed-voicecard
-fi
-
-# Set up Python virtual environment
+# Create and activate a virtual environment
 python3 -m venv venv
 source venv/bin/activate
+
+# Install required Python packages
+pip install -U pip
 pip install -r requirements.txt
+
+# Install Boost manually to avoid header path issues
 pip install boost
 BOOST_INCLUDEDIR=/usr/include/boost
 export BOOST_INCLUDEDIR
@@ -50,9 +50,10 @@ export BOOST_INCLUDEDIR
 # Install additional dependencies for ReSpeaker 2-Mic HAT
 pip install pyaudio numpy
 
+# Deactivate the virtual environment
 deactivate
 
-# Create Wyoming Satellite Configuration
+# Create Wyoming Satellite Configuration File
 CONFIG_FILE="$HOME/wyoming-satellite/config.yml"
 cat <<EOL > "$CONFIG_FILE"
 server:
@@ -64,12 +65,6 @@ audio:
   sampling-rate: 16000
   sample-format: s16le
   channels: 1
-
-plugins:
-  snapcast:
-    host: localhost
-    port: 1704
-    stream_name: "$HOSTNAME"
 EOL
 
 # Create a systemd service for Wyoming Satellite
@@ -80,19 +75,21 @@ Description=Wyoming Satellite Service
 After=network.target
 
 [Service]
-ExecStart=/home/$USERNAME/wyoming-satellite/venv/bin/python /home/$USERNAME/wyoming-satellite/main.py
-WorkingDirectory=/home/$USERNAME/wyoming-satellite
+ExecStart=/home/$USER/wyoming-satellite/venv/bin/python -m wyoming_satellite
+WorkingDirectory=/home/$USER/wyoming-satellite
 Restart=always
-User=$USERNAME
-Group=audio
+User=$USER
 
 [Install]
 WantedBy=multi-user.target
 EOL
 
+# Reload systemd, enable and start Wyoming Satellite
 sudo systemctl daemon-reload
 sudo systemctl enable wyoming-satellite
 sudo systemctl start wyoming-satellite
+
+echo "===== Wyoming Satellite Installation Complete ====="
 
 # Stop Wyoming Satellite and LED services before modifying PulseAudio
 sudo systemctl stop wyoming-satellite || true
