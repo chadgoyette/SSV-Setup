@@ -93,8 +93,6 @@ fi
 echo "===== Installing ReSpeaker Drivers ====="
 cd ~/wyoming-satellite/
 sudo bash etc/install-respeaker-drivers.sh
-cd ~/
-
 .venv/bin/pip3 install --upgrade pip
 .venv/bin/pip3 install --upgrade wheel setuptools
 .venv/bin/pip3 install \
@@ -102,9 +100,14 @@ cd ~/
   -e '.[all]'
 script/run --help
 
+# Deactivate the virtual environment
 deactivate
 
 
+echo "===== Starting system site package VM ====="
+
+cd wyoming-satellite/examples
+python3 -m venv --system-site-packages .venv
 echo "===== Installing Boost Manually ====="
 
 # Install Boost manually to avoid header path issues
