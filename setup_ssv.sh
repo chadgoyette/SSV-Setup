@@ -67,7 +67,15 @@ audio:
   channels: 1
 EOL
 
-# Create a systemd service for Wyoming Satellite
+# Ensure old Wyoming Satellite service file is removed before creating a new one
+if [ -f "/etc/systemd/system/wyoming-satellite.service" ]; then
+    sudo systemctl stop wyoming-satellite || true
+    sudo systemctl disable wyoming-satellite || true
+    sudo rm -f /etc/systemd/system/wyoming-satellite.service
+    sudo systemctl daemon-reload
+fi
+
+# Create a new systemd service for Wyoming Satellite
 SERVICE_FILE="/etc/systemd/system/wyoming-satellite.service"
 cat <<EOL | sudo tee "$SERVICE_FILE"
 [Unit]
@@ -75,14 +83,19 @@ Description=Wyoming Satellite Service
 After=network.target
 
 [Service]
-ExecStart=/home/$USER/wyoming-satellite/venv/bin/python -m wyoming_satellite
-WorkingDirectory=/home/$USER/wyoming-satellite
+ExecStart=/home/$USERNAME/wyoming-satellite/venv/bin/python -m wyoming_satellite
+WorkingDirectory=/home/$USERNAME/wyoming-satellite
 Restart=always
-User=$USER
+User=$USERNAME
 
 [Install]
 WantedBy=multi-user.target
 EOL
+
+# Reload systemd and enable the updated Wyoming Satellite service
+sudo systemctl daemon-reload
+sudo systemctl enable wyoming-satellite
+sudo systemctl restart wyoming-satellite
 
 # Reload systemd, enable and start Wyoming Satellite
 sudo systemctl daemon-reload
