@@ -35,11 +35,13 @@ fi
 # Ensure the script is the latest version
 if [ "$LAST_STEP" -lt 1 ]; then
     echo "📌 Checking for the latest SSV-Setup script..."
+    
     if [ -d "$HOME/SSV-Setup" ]; then
         cd "$HOME/SSV-Setup" && git pull origin main
     else
         git clone https://github.com/Chadgoyette/SSV-Setup.git "$HOME/SSV-Setup"
     fi
+    
     log_progress "1"
 fi
 
