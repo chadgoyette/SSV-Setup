@@ -19,20 +19,43 @@ sudo mkswap /swapfile
 sudo swapon /swapfile
 sudo bash -c 'echo "/swapfile none swap sw 0 0" >> /etc/fstab'
 
+# Step 1: Clone Necessary Repositories
+echo "===== Cloning Necessary Repositories ====="
+
+# Define repositories and their target directories
+declare -A REPOS=(
+    ["https://github.com/rhasspy/wyoming-satellite.git"]="$HOME/wyoming-satellite"
+    ["https://github.com/rhasspy/wyoming-openwakeword.git"]="$HOME/wyoming-openwakeword"
+    ["https://github.com/FutureProofHomes/wyoming-enhancements.git"]="$HOME/wyoming-enhancements"
+)
+
+# Clone repositories if they don't already exist
+for REPO_URL in "${!REPOS[@]}"; {
+    TARGET_DIR="${REPOS[$REPO_URL]}"
+    if [ ! -d "$TARGET_DIR" ]; then
+        echo "Cloning $REPO_URL into $TARGET_DIR..."
+        git clone "$REPO_URL" "$TARGET_DIR"
+    else
+        echo "Repository $REPO_URL already cloned in $TARGET_DIR."
+    fi
+}
+
+
 # Step 1: Install Wyoming Satellite (Following the Official Tutorial)
 echo "===== Installing Wyoming Satellite ====="
+
+echo "===== Installing Depenencies ====="
 
 # Ensure dependencies are installed
 sudo apt install -y python3 python3-venv python3-pip portaudio19-dev flac
 
-# Clone the Wyoming Satellite repository
-if [ ! -d "$HOME/wyoming-satellite" ]; then
-    echo "Cloning Wyoming Satellite repository..."
-    git clone https://github.com/rhasspy/wyoming-satellite.git ~/wyoming-satellite
-fi
+echo "===== Navigating to Wyoming-Satellite Directory ====="
 
 # Navigate into the directory
+cd ~/wyoming-satellite || exit# Navigate into the directory
 cd ~/wyoming-satellite || exit
+
+echo "===== Removing any Existing Virtual Environment ====="
 
 # Remove existing virtual environment if it's owned by root
 if [ -d "$HOME/wyoming-satellite/.venv" ]; then
@@ -42,6 +65,8 @@ if [ -d "$HOME/wyoming-satellite/.venv" ]; then
         sudo rm -rf "$HOME/wyoming-satellite/.venv"
     fi
 fi
+
+echo "===== Creating a New Virtual Environment ====="
 
 # Create a new virtual environment under the correct user
 echo "Creating a new Python virtual environment..."
@@ -55,16 +80,24 @@ pip install -r requirements.txt
 
 deactivate
 
+echo "===== Installing Boost Manually ====="
+
 # Install Boost manually to avoid header path issues
 pip install boost
 BOOST_INCLUDEDIR=/usr/include/boost
 export BOOST_INCLUDEDIR
 
+echo "===== Installing pyaudio numpy for ReSpeaker 2-Mic HAT ====="
+
 # Install additional dependencies for ReSpeaker 2-Mic HAT
 pip install pyaudio numpy
 
+echo "===== Deactivate the Virtual Environment ====="
+
 # Deactivate the virtual environment
 deactivate
+
+echo "===== Creating the Wyoming Satellite Config FIle ====="
 
 # Create Wyoming Satellite Configuration File
 CONFIG_FILE="$HOME/wyoming-satellite/config.yml"
@@ -80,11 +113,15 @@ audio:
   channels: 1
 EOL
 
+echo "===== If the file exists removing ====="
+
 # Remove existing Wyoming Satellite service file if it exists
 SERVICE_FILE="/etc/systemd/system/wyoming-satellite.service"
 if [ -f "$SERVICE_FILE" ]; then
     sudo rm "$SERVICE_FILE"
 fi
+
+echo "===== Creating the Systemd Service ====="
 
 # Create Wyoming Satellite Systemd Service
 SERVICE_FILE="/etc/systemd/system/wyoming-satellite.service"
@@ -116,26 +153,31 @@ User=$USERNAME
 WantedBy=default.target
 EOL
 
-# Step: Install Local Wake Word Detection (openWakeWord)
+echo "===== Installing Local Wake Word Detection ====="
+
+# Step 2: Install Local Wake Word Detection (openWakeWord)
 echo "Installing local wake word detection (openWakeWord)..."
+
+echo "===== Inmstalling OpenWW Dependencies ====="
 
 # Install necessary dependencies
 sudo apt-get update
 sudo apt-get install --no-install-recommends -y libopenblas-dev
 
-# Clone and set up openWakeWord
-if [ ! -d "$HOME/wyoming-openwakeword" ]; then
-    git clone https://github.com/rhasspy/wyoming-openwakeword.git ~/wyoming-openwakeword
-fi
+echo "===== Navigating into the new directory ====="
 
+# Navigate into the directory
 cd ~/wyoming-openwakeword || exit
 script/setup
 
-# Remove existing Wyoming OpenWakeWord service file if it exists
+# Create systemd service for openWakeWord
 WAKEWORD_SERVICE_FILE="/etc/systemd/system/wyoming-openwakeword.service"
 if [ -f "$WAKEWORD_SERVICE_FILE" ]; then
     sudo rm "$WAKEWORD_SERVICE_FILE"
 fi
+
+
+echo "===== Creating the Systemd Service for OpenWW ====="
 
 # Create systemd service for openWakeWord
 cat <<EOL | sudo tee "$WAKEWORD_SERVICE_FILE"
@@ -153,11 +195,15 @@ RestartSec=1
 WantedBy=default.target
 EOL
 
+echo "===== Configuring the LED Service ====="
+
 # Step: Install and Configure LED Service for ReSpeaker 2Mic HAT
 echo "Setting up LED service for ReSpeaker 2Mic HAT..."
 
 # Navigate to the Wyoming Satellite examples directory
 cd ~/wyoming-satellite/examples || exit
+
+echo "===== Setting up VM for LED service ====="
 
 # Set up a Python virtual environment for the LED service
 python3 -m venv --system-site-packages .venv
@@ -165,17 +211,25 @@ python3 -m venv --system-site-packages .venv
 .venv/bin/pip3 install --upgrade wheel setuptools
 .venv/bin/pip3 install 'wyoming==1.5.2'
 
+echo "===== Installing Dependencies ====="
+
 # Install additional dependencies if required
 sudo apt-get install -y python3-spidev python3-gpiozero
 
+echo "===== Testing the Service ====="
+
 # Test the service to ensure it runs correctly
 .venv/bin/python3 2mic_service.py --help
+
+echo "===== Cleaning up any old service file ====="
 
 # Remove existing LED service file if it exists
 LED_SERVICE_FILE="/etc/systemd/system/2mic_leds.service"
 if [ -f "$LED_SERVICE_FILE" ]; then
     sudo rm "$LED_SERVICE_FILE"
 fi
+
+echo "===== Creating the new service file ====="
 
 # Create systemd service for LED control
 cat <<EOL | sudo tee "$LED_SERVICE_FILE"
@@ -194,6 +248,8 @@ WantedBy=default.target
 EOL
 
 
+echo "===== Reloading the WYoming-Satellite Service ====="
+
 # Reload systemd and restart the service
 sudo systemctl daemon-reload
 sudo systemctl enable wyoming-satellite
@@ -201,17 +257,21 @@ sudo systemctl restart wyoming-satellite
 
 echo "===== Wyoming Satellite Installation Complete ====="
 
+echo "===== Starting PulseAudio Installation ======="
+
 # Stop Wyoming Satellite and LED services before modifying PulseAudio
 sudo systemctl stop wyoming-satellite || true
 sudo systemctl stop led-service || true
-
+echo "===== Stoping Wyoming Service for PulseAudio Installation ======="
 # Step 2: Install PulseAudio and Dependencies
 sudo apt install -y pulseaudio pulseaudio-utils git wget curl alsa-utils python3 python3-pip jq libasound2 avahi-daemon libboost-all-dev
-
+echo "===== Completed Installing PA Dependencies ======="
+echo "===== Adding Users and Group For System Mode ======="
 # Add pulse user and group for system mode
 sudo groupadd -r pulse
 sudo useradd -r -g pulse -G audio -d /var/run/pulse pulse
 sudo usermod -aG pulse-access $USERNAME
+echo "===== Configuring PA for System Mode ======="
 
 # Configure PulseAudio for system mode
 sudo mkdir -p /etc/pulse
@@ -223,16 +283,19 @@ load-module module-alsa-sink device=hw:1,0 sink_name=seeed_sink
 load-module module-always-sink
 EOL
 
+echo "===== Setting Permissions and Restarting PA ======="
 # Set permissions and restart PulseAudio
 sudo chmod 644 /etc/pulse/system.pa
 sudo systemctl restart pulseaudio
-
+echo "===== Installing Wyoming-Enhancements ======="
+echo "===== Are you Bored Yet??????  ======="
 # Step 3: Install Wyoming Enhancements
 if [ ! -d "$HOME/wyoming-enhancements" ]; then
     echo "Cloning Wyoming Enhancements repository..."
     git clone https://github.com/FutureProofHomes/wyoming-enhancements.git ~/wyoming-enhancements
 fi
 
+echo "===== Installing Snapcast Client...This will be fun! ======="
 # Step 4: Install Snapcast from GitHub Release
 SNAP_VERSION="0.31.0"
 SNAP_URL="https://github.com/badaix/snapcast/releases/download/v${SNAP_VERSION}/snapclient_${SNAP_VERSION}-1_armhf_bookworm_with-pulse.deb"
@@ -260,14 +323,14 @@ SNAPCLIENT_OPTS="-h localhost -s $HOSTNAME"
 EOL
 
 sudo systemctl restart snapclient
-
+echo "===== Applying the Wyoming Enhancements ======="
 # Step 5: Apply Wyoming Enhancements Modifications
 MODIFY_WYOMING_SCRIPT="$HOME/wyoming-enhancements/snapcast/modify_wyoming_satellite.sh"
 if [ -f "$MODIFY_WYOMING_SCRIPT" ]; then
     echo "Applying Wyoming Satellite modifications..."
     bash "$MODIFY_WYOMING_SCRIPT"
 fi
-
+echo "===== Restarting the Wyoming-Satellite Service ======="
 sudo systemctl restart wyoming-satellite
 
 echo "===== SSV Setup Completed Successfully on $(date) ====="
