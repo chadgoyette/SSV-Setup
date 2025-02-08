@@ -24,7 +24,6 @@ echo "===== Cloning Necessary Repositories ====="
 
 # Define repositories and their target directories
 declare -A REPOS=(
-    ["https://github.com/rhasspy/wyoming-satellite.git"]="$HOME/wyoming-satellite"
     ["https://github.com/rhasspy/wyoming-openwakeword.git"]="$HOME/wyoming-openwakeword"
     ["https://github.com/FutureProofHomes/wyoming-enhancements.git"]="$HOME/wyoming-enhancements"
 )
@@ -73,12 +72,23 @@ echo "Creating a new Python virtual environment..."
 python3 -m venv .venv
 source .venv/bin/activate
 
+
+# Install Wyoming Satellite from GitHub
+pip install --no-cache-dir --force-reinstall git+https://github.com/rhasspy/wyoming-satellite.git
 # Install dependencies
 echo "Installing Wyoming Satellite dependencies..."
 pip install --upgrade pip
 pip install -r requirements.txt
 pip install pyring_buffer
 pip install wyoming
+
+# Verify installation
+if ! python -c "import importlib.metadata; print(importlib.metadata.version('wyoming-satellite'))" &>/dev/null; then
+    echo "❌ ERROR: Wyoming Satellite installation failed."
+    exit 1
+else
+    echo "✅ Wyoming Satellite installed successfully."
+fi
 
 deactivate
 
