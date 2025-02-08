@@ -154,23 +154,27 @@ if [ "$LAST_STEP" -lt 7 ]; then
 fi
 
 # Step 7: Install Snapclient
-if [ "$LAST_STEP" -lt 8 ]; then
-    echo "📌 Installing Snapclient..."
-    SNAP_VERSION="0.31.0"
-    SNAP_URL="https://github.com/badaix/snapcast/releases/download/v${SNAP_VERSION}/snapclient_${SNAP_VERSION}-1_armhf_bookworm_with-pulse.deb"
+# Step: Install Snapclient (Manually from GitHub)
+SNAP_VERSION="0.31.0"
+SNAP_URL="https://github.com/badaix/snapcast/releases/download/v${SNAP_VERSION}/snapclient_${SNAP_VERSION}-1_armhf_bookworm_with-pulse.deb"
 
-    wget -O snapclient.deb "$SNAP_URL"
-    sudo dpkg -i snapclient.deb
-    sudo apt --fix-broken install -y
-    rm -f snapclient.deb
+echo "Downloading and installing Snapclient..."
+wget -O snapclient.deb "$SNAP_URL"
+sudo dpkg -i snapclient.deb
+sudo apt --fix-broken install -y
+rm -f snapclient.deb
 
-    if ! command -v snapclient &> /dev/null; then
-        echo "❌ ERROR: Snapclient installation failed."
-        exit 1
-    fi
+# Verify installation
+if ! command -v snapclient &> /dev/null; then
+    echo "❌ ERROR: Snapclient installation failed."
+    exit 1
+else
+    echo "✅ Snapclient installed successfully."
+fi
 
-    sudo systemctl enable snapclient
-    sudo systemctl start snapclient
+# Enable and start Snapclient
+sudo systemctl enable snapclient
+sudo systemctl start snapclient
 
     # Ensure Snapcast service uses the correct hostname
     SNAPCAST_CONFIG="/etc/default/snapclient"
