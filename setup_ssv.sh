@@ -77,6 +77,7 @@ source .venv/bin/activate
 echo "Installing Wyoming Satellite dependencies..."
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install pyring_buffer
 
 deactivate
 
