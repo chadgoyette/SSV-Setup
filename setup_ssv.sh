@@ -1,159 +1,137 @@
 #!/bin/bash
-# SSV Setup Script for Snapcast, PulseAudio, Wyoming Satellite, and Enhancements
-# Logs to /var/log/ssv_setup.log
 
-LOGFILE="/var/log/ssv_setup.log"
-exec > >(tee -a "$LOGFILE") 2>&1
-echo "===== SSV Setup Script Started on $(date) ====="
+# Variables
+PROGRESS_FILE="/var/log/ssv_setup_progress.log"
+HOSTNAME=$(hostname)
+USERNAME=$(whoami)
 
-# Exit on error
-set -e
-
-# Function to handle errors
-error_exit() {
-    echo "❌ ERROR: $1"
-    exit 1
+# Function to log progress
+log_progress() {
+    echo "$1" | sudo tee "$PROGRESS_FILE"
 }
 
-# Update package lists
-echo "Updating package lists..."
-sudo apt update || error_exit "Failed to update packages"
+# Function to get last completed step
+get_last_step() {
+    if [ -f "$PROGRESS_FILE" ]; then
+        cat "$PROGRESS_FILE"
+    else
+        echo "0"
+    fi
+}
 
-# Upgrade system packages
-echo "Upgrading system packages..."
-sudo apt upgrade -y || error_exit "Failed to upgrade packages"
+LAST_STEP=$(get_last_step)
 
-# Increase Swap Space (for dependency installations)
-echo "Checking swap size..."
-sudo fallocate -l 1G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-echo "Swap space increased."
+echo "===== SSV Setup Script Started on $(date) ====="
+echo "Last completed step: $LAST_STEP"
 
-# Install Required Dependencies
-echo "Installing dependencies..."
-sudo apt install -y \
-    snapcast \
-    pulseaudio \
-    pulseaudio-utils \
-    python3-pip \
-    python3-venv \
-    git || error_exit "Failed to install dependencies"
+# If reboot is required, resume from last step
+if [ "$LAST_STEP" == "REBOOT_REQUIRED" ]; then
+    echo "🔄 Resuming installation after reboot..."
+    LAST_STEP=2
+fi
 
-# Setup PulseAudio System Mode
-echo "Configuring PulseAudio to run in system mode..."
-sudo mkdir -p /etc/pulse/
-sudo tee /etc/pulse/system.pa > /dev/null <<EOL
-#!/usr/bin/pulseaudio -nF
+# Ensure swap size is adequate
+if [ "$LAST_STEP" -lt 1 ]; then
+    echo "📌 Setting up swap space..."
+    sudo fallocate -l 1G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    sudo bash -c 'echo "/swapfile none swap sw 0 0" >> /etc/fstab'
+    log_progress "1"
+    sudo reboot
+fi
 
-# Auto-restore devices
-load-module module-device-restore
-load-module module-stream-restore
-load-module module-card-restore
+# Step 1: Install Wyoming Satellite
+if [ "$LAST_STEP" -lt 2 ]; then
+    echo "📌 Installing Wyoming Satellite..."
+    sudo apt update -y
+    sudo apt install -y python3 python3-venv python3-pip git
 
-# Auto-load drivers
-.ifexists module-udev-detect.so
-load-module module-udev-detect
-.else
-load-module module-detect
-.endif
+    if [ ! -d "$HOME/wyoming-satellite" ]; then
+        git clone https://github.com/rhasspy/wyoming-satellite.git ~/wyoming-satellite
+    fi
+    cd ~/wyoming-satellite || exit
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+    pip install boost
+    export BOOST_INCLUDEDIR=/usr/include/boost
+    deactivate
+    log_progress "2"
+    sudo reboot
+fi
 
-# Enable protocols
-load-module module-native-protocol-unix
+# Step 2: Install PulseAudio
+if [ "$LAST_STEP" -lt 3 ]; then
+    echo "📌 Installing PulseAudio and dependencies..."
+    sudo apt install -y pulseaudio pulseaudio-utils git wget curl alsa-utils jq libasound2 avahi-daemon libboost-all-dev
+    log_progress "3"
+    sudo reboot
+fi
 
-# Default device restore
-load-module module-default-device-restore
+# Step 3: Install Wyoming Enhancements
+if [ "$LAST_STEP" -lt 4 ]; then
+    echo "📌 Installing Wyoming Enhancements..."
+    if [ ! -d "$HOME/wyoming-enhancements" ]; then
+        git clone https://github.com/FutureProofHomes/wyoming-enhancements.git ~/wyoming-enhancements
+    fi
+    log_progress "4"
+    sudo reboot
+fi
 
-# Always have a fallback sink
-load-module module-always-sink
+# Step 4: Install Snapclient
+if [ "$LAST_STEP" -lt 5 ]; then
+    echo "📌 Installing Snapclient..."
+    SNAP_VERSION="0.31.0"
+    SNAP_URL="https://github.com/badaix/snapcast/releases/download/v${SNAP_VERSION}/snapclient_${SNAP_VERSION}-1_armhf_bookworm_with-pulse.deb"
+    wget -O snapclient.deb "$SNAP_URL"
+    sudo dpkg -i snapclient.deb
+    sudo apt --fix-broken install -y
+    rm -f snapclient.deb
+    if ! command -v snapclient &> /dev/null; then
+        echo "❌ ERROR: Snapclient installation failed."
+        exit 1
+    fi
+    sudo systemctl enable snapclient
+    sudo systemctl start snapclient
+    log_progress "5"
+    sudo reboot
+fi
 
-# Suspend idle sinks
-load-module module-suspend-on-idle
+# Step 5: Modify Wyoming Satellite
+if [ "$LAST_STEP" -lt 6 ]; then
+    echo "📌 Modifying Wyoming Satellite..."
+    MODIFY_WYOMING_SCRIPT="$HOME/wyoming-enhancements/snapcast/modify_wyoming_satellite.sh"
+    if [ -f "$MODIFY_WYOMING_SCRIPT" ]; then
+        bash "$MODIFY_WYOMING_SCRIPT"
+    fi
+    sudo systemctl restart wyoming-satellite
+    log_progress "6"
+fi
 
-# Enable volume ducking
-load-module module-role-ducking trigger_roles=announce,phone,notification,event ducking_roles=any_role volume=33%
+# Create systemd service to resume after reboot
+if [ "$LAST_STEP" -lt 7 ]; then
+    echo "📌 Creating systemd service for auto-resume..."
 
-# Load Seeed Voicecard (Ensure correct hw:1,0 path)
-load-module module-alsa-sink device=hw:1,0 sink_name=seeed_sink
-set-default-sink seeed_sink
-EOL
-
-# Enable PulseAudio system service
-echo "Setting up PulseAudio system service..."
-sudo tee /etc/systemd/system/pulseaudio.service > /dev/null <<EOL
+    SERVICE_FILE="/etc/systemd/system/ssv-setup-resume.service"
+    sudo bash -c "cat <<EOL > $SERVICE_FILE
 [Unit]
-Description=PulseAudio system server
+Description=Resume SSV Setup Script After Reboot
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/pulseaudio --system --disallow-exit --disable-shm
-Restart=always
-User=pulse
+ExecStart=/bin/bash /home/$USERNAME/SSV-Setup/setup_ssv.sh --resume
+Restart=on-failure
+User=$USERNAME
 
 [Install]
 WantedBy=multi-user.target
-EOL
+EOL"
 
-# Enable and start PulseAudio
-sudo systemctl daemon-reload
-sudo systemctl enable pulseaudio.service
-sudo systemctl restart pulseaudio.service || error_exit "Failed to start PulseAudio"
-
-# Install Wyoming Satellite
-echo "Installing Wyoming Satellite..."
-git clone https://github.com/mikejgray/wyoming-satellite.git ~/wyoming-satellite
-cd ~/wyoming-satellite
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt || error_exit "Failed to install Wyoming dependencies"
-deactivate
-
-# Setup Wyoming Satellite Service
-echo "Setting up Wyoming Satellite as a systemd service..."
-sudo tee /etc/systemd/system/wyoming.service > /dev/null <<EOL
-[Unit]
-Description=Wyoming Satellite Voice Assistant
-After=network.target
-
-[Service]
-ExecStart=/home/SSV2/wyoming-satellite/venv/bin/python3 /home/SSV2/wyoming-satellite/wyoming-satellite.py
-Restart=always
-User=SSV2
-
-[Install]
-WantedBy=multi-user.target
-EOL
-
-# Enable and start Wyoming Satellite
-sudo systemctl daemon-reload
-sudo systemctl enable wyoming.service
-sudo systemctl restart wyoming.service || error_exit "Failed to start Wyoming Satellite"
-
-# Setup Snapcast Client
-echo "Configuring Snapcast Client..."
-sudo tee /etc/systemd/system/snapclient.service > /dev/null <<EOL
-[Unit]
-Description=Snapcast Client
-After=network.target pulseaudio.service
-
-[Service]
-ExecStart=/usr/bin/snapclient --player pulse
-Restart=always
-User=snapclient
-
-[Install]
-WantedBy=multi-user.target
-EOL
-
-# Enable and start Snapcast Client
-sudo systemctl daemon-reload
-sudo systemctl enable snapclient.service
-sudo systemctl restart snapclient.service || error_exit "Failed to start Snapcast Client"
-
-# Cleanup and remove swap
-echo "Removing temporary swap file..."
-sudo swapoff /swapfile
-sudo rm /swapfile
+    sudo systemctl daemon-reload
+    sudo systemctl enable ssv-setup-resume
+    log_progress "7"
+fi
 
 echo "===== SSV Setup Completed Successfully on $(date) ====="
