@@ -105,8 +105,6 @@ deactivate
 
 
 echo "===== Starting system site package VM ====="
-
-cd wyoming-satellite/examples
 python3 -m venv --system-site-packages .venv
 echo "===== Installing Boost Manually ====="
 
@@ -292,7 +290,8 @@ sudo systemctl stop wyoming-satellite || true
 sudo systemctl stop led-service || true
 echo "===== Stoping Wyoming Service for PulseAudio Installation ======="
 # Step 2: Install PulseAudio and Dependencies
-sudo apt install -y pulseaudio pulseaudio-utils git wget curl alsa-utils python3 python3-pip jq libasound2 avahi-daemon libboost-all-dev
+sudo apt-get update
+sudo apt-get install -y pulseaudio pulseaudio-utils git wget curl alsa-utils python3 python3-pip jq libasound2 avahi-daemon libboost-all-dev
 echo "===== Completed Installing PA Dependencies ======="
 echo "===== Adding Users and Group For System Mode ======="
 # Add pulse user and group for system mode
@@ -300,6 +299,30 @@ sudo groupadd -r pulse
 sudo useradd -r -g pulse -G audio -d /var/run/pulse pulse
 sudo usermod -aG pulse-access $USERNAME
 echo "===== Configuring PA for System Mode ======="
+
+sudo systemctl --global disable pulseaudio.service pulseaudio.socket
+echo "===== Configuring PulseAudio autospawn setting ====="
+
+# Ensure the PulseAudio client.conf file exists
+sudo touch /etc/pulse/client.conf
+
+# Check if autospawn is already set in the file
+if grep -q "^autospawn" /etc/pulse/client.conf; then
+    echo "Updating autospawn setting in /etc/pulse/client.conf..."
+    sudo sed -i 's/^autospawn.*/autospawn = no/' /etc/pulse/client.conf
+else
+    echo "Adding autospawn setting to /etc/pulse/client.conf..."
+    sudo tee -a /etc/pulse/client.conf > /dev/null <<EOL
+
+### Disable PulseAudio autospawn
+autospawn = no
+EOL
+fi
+
+# Restart PulseAudio to apply changes
+sudo systemctl restart pulseaudio.service
+
+echo "✅ PulseAudio autospawn setting configured successfully."
 
 # Configure PulseAudio for system mode
 sudo mkdir -p /etc/pulse
@@ -311,10 +334,63 @@ load-module module-alsa-sink device=hw:1,0 sink_name=seeed_sink
 load-module module-always-sink
 EOL
 
+
+echo "===== Configuring PulseAudio System Service ====="
+
+# Create or overwrite the PulseAudio systemd service
+sudo tee /etc/systemd/system/pulseaudio.service > /dev/null <<EOL
+[Unit]
+Description=PulseAudio system server
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/pulseaudio --daemonize=no --system --realtime --log-target=journal
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
+# Reload systemd to apply changes
+sudo systemctl daemon-reload
+
+# Enable and restart PulseAudio service
+sudo systemctl enable pulseaudio.service
+sudo systemctl restart pulseaudio.service
+
+echo "✅ PulseAudio system service configured successfully."
+
 echo "===== Setting Permissions and Restarting PA ======="
 # Set permissions and restart PulseAudio
 sudo chmod 644 /etc/pulse/system.pa
 sudo systemctl restart pulseaudio
+
+
+echo "=====************************************************* Testing Audio ******************************************************** ======="
+paplay /usr/share/sounds/alsa/Front_Center.wav
+echo "=====************************************************* Testing Audio Complete************************************************ ======="
+
+echo "===== Configuring PulseAudio Volume Ducking ====="
+
+# Ensure PulseAudio system.pa file exists
+sudo touch /etc/pulse/system.pa
+
+# Check if the module is already in the file
+if ! grep -q "module-role-ducking" /etc/pulse/system.pa; then
+    echo "Adding module-role-ducking to PulseAudio configuration..."
+    sudo tee -a /etc/pulse/system.pa > /dev/null <<EOL
+
+### Enable Volume Ducking
+load-module module-role-ducking trigger_roles=announce,phone,notification,event ducking_roles=any_role volume=33%
+EOL
+else
+    echo "PulseAudio volume ducking module is already configured."
+fi
+
+# Restart PulseAudio to apply changes
+sudo systemctl restart pulseaudio.service
+
+echo "✅ PulseAudio volume ducking configured successfully."
+
 echo "===== Installing Wyoming-Enhancements ======="
 echo "===== Are you Bored Yet??????  ======="
 # Step 3: Install Wyoming Enhancements
