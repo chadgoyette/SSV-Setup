@@ -51,7 +51,6 @@ sudo apt install -y python3 python3-venv python3-pip portaudio19-dev flac
 echo "===== Navigating to Wyoming-Satellite Directory ====="
 
 # Navigate into the directory
-cd ~/wyoming-satellite || exit# Navigate into the directory
 cd ~/wyoming-satellite || exit
 
 echo "===== Removing any Existing Virtual Environment ====="
@@ -90,7 +89,21 @@ else
     echo "✅ Wyoming Satellite installed successfully."
 fi
 
+# Install ReSpeaker drivers (inside Wyoming Satellite directory)
+echo "===== Installing ReSpeaker Drivers ====="
+cd ~/wyoming-satellite/
+sudo bash etc/install-respeaker-drivers.sh
+cd ~/
+
+.venv/bin/pip3 install --upgrade pip
+.venv/bin/pip3 install --upgrade wheel setuptools
+.venv/bin/pip3 install \
+  -f 'https://synesthesiam.github.io/prebuilt-apps/' \
+  -e '.[all]'
+script/run --help
+
 deactivate
+
 
 echo "===== Installing Boost Manually ====="
 
