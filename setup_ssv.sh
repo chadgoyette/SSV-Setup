@@ -34,13 +34,26 @@ fi
 # Navigate into the directory
 cd ~/wyoming-satellite || exit
 
-# Create and activate a virtual environment
-python3 -m venv venv
-source venv/bin/activate
+# Remove existing virtual environment if it's owned by root
+if [ -d "$HOME/wyoming-satellite/.venv" ]; then
+    OWNER=$(stat -c '%U' "$HOME/wyoming-satellite/.venv")
+    if [ "$OWNER" != "$USERNAME" ]; then
+        echo "Removing .venv due to incorrect ownership..."
+        sudo rm -rf "$HOME/wyoming-satellite/.venv"
+    fi
+fi
 
-# Install required Python packages
-pip install -U pip
+# Create a new virtual environment under the correct user
+echo "Creating a new Python virtual environment..."
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+echo "Installing Wyoming Satellite dependencies..."
+pip install --upgrade pip
 pip install -r requirements.txt
+
+deactivate
 
 # Install Boost manually to avoid header path issues
 pip install boost
@@ -73,7 +86,9 @@ if [ -f "$SERVICE_FILE" ]; then
     sudo rm "$SERVICE_FILE"
 fi
 
-# Create a new Wyoming Satellite service file
+# Create Wyoming Satellite Systemd Service
+SERVICE_FILE="/etc/systemd/system/wyoming-satellite.service"
+sudo rm -f "$SERVICE_FILE"
 cat <<EOL | sudo tee "$SERVICE_FILE"
 [Unit]
 Description=Wyoming Satellite
@@ -95,6 +110,7 @@ ExecStart=/home/$USERNAME/wyoming-satellite/script/run \
 WorkingDirectory=/home/$USERNAME/wyoming-satellite
 Restart=always
 RestartSec=1
+User=$USERNAME
 
 [Install]
 WantedBy=default.target
