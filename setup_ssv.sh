@@ -78,6 +78,7 @@ echo "Installing Wyoming Satellite dependencies..."
 pip install --upgrade pip
 pip install -r requirements.txt
 pip install pyring_buffer
+pip install wyoming
 
 deactivate
 
