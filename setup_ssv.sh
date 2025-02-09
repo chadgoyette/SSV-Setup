@@ -31,10 +31,21 @@ EOL
 
 HOSTNAME=$(hostname)
 USERNAME=$(whoami)
-LOG_FILE="/var/log/ssv_setup.log"
+# Determine the proper home directory for logs.
+if [ -n "${SUDO_USER:-}" ]; then
+    # If run with sudo, get the home directory of the original user.
+    USER_HOME=$(eval echo "~$SUDO_USER")
+else
+    USER_HOME=$HOME
+fi
 
-exec > >(tee -a $LOG_FILE) 2>&1
+# Set the log file in the original user's home directory.
+LOG_FILE="$USER_HOME/ssv_setup.log"
 
+# Redirect stdout and stderr to the log file (append mode)
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+echo "===== SSV Setup Script Started on $(date) ====="
 
 # Update package lists and upgrade system
 sudo apt update -y
