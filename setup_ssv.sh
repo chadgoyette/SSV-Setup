@@ -204,7 +204,7 @@ python3 -m venv .venv
 script/run --help
 
 # Deactivate the virtual environment
-deactivate
+#deactivate
 
 
 echo "===== Starting system site package VM ====="
