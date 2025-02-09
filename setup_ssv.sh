@@ -30,6 +30,11 @@ fi
 # Load the configuration parameters so they can be used throughout the script.
 source "$CONFIG_FILE"
 
+echo "Loaded configuration:"
+echo "  SWAP_SIZE: $SWAP_SIZE"
+echo "  ARECORD_DEVICE: $ARECORD_DEVICE"
+echo "  APLAY_DEVICE: $APLAY_DEVICE"
+echo "  SNAPCLIENT_HOSTNAME: $SNAPCLIENT_HOSTNAME"
 
 
 
@@ -49,7 +54,7 @@ echo "===== SSV Setup Script Started on $(date) ====="
 # Ensure swap size is adequate (using 2GB as per SSV2 configuration)
 if [ ! -f "/swapfile" ]; then
   echo "Creating 2GB swap file..."
-  sudo fallocate -l 2G /swapfile
+  sudo fallocate -l $SWAP_SIZE /swapfile
   sudo chmod 600 /swapfile
   sudo mkswap /swapfile
   sudo swapon /swapfile
@@ -208,8 +213,8 @@ Type=simple
 ExecStart=/home/$USERNAME/wyoming-satellite/script/run \
   --name '$USERNAME' \
   --uri 'tcp://0.0.0.0:10700' \
-  --mic-command 'arecord -D plughw:CARD=seeed2micvoicec,DEV=0 -r 16000 -c 1 -f S16_LE -t raw' \
-  --snd-command 'aplay -D plughw:CARD=seeed2micvoicec,DEV=0 -r 22050 -c 1 -f S16_LE -t raw' \
+  --mic-command "arecord -D $ARECORD_DEVICE -r 16000 -c 1 -f S16_LE -t raw" \
+  --snd-command "aplay -D $APLAY_DEVICE -r 22050 -c 1 -f S16_LE -t raw" \
   --wake-uri 'tcp://127.0.0.1:10400' \
   --wake-word-name 'hey_jarvis' \
   --event-uri 'tcp://127.0.0.1:10500'
