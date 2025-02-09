@@ -176,7 +176,7 @@ EOL
 # Install ReSpeaker drivers (inside Wyoming Satellite directory)
 echo "===== Installing ReSpeaker Drivers ====="
 cd ~/wyoming-satellite/
-sudo bash etc/install-respeaker-drivers.sh
+sudo bash etc/install-respeaker-drivers.sh || true
 .venv/bin/pip3 install --upgrade pip
 .venv/bin/pip3 install --upgrade wheel setuptools
 .venv/bin/pip3 install \
