@@ -4,7 +4,7 @@ echo "===== SSV Setup Script Started on $(date) ====="
 
 echo "===== Load or Create Config File  ====="
 # Set this variable in your configuration (or here) to the expected repository directory.
-SSV_REPO_DIR="/home/yourusername/wyoming-satellite"
+SSV_REPO_DIR="/home/$(whoami)/wyoming-satellite"
 
 
 load_configuration() {
