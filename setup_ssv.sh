@@ -3,6 +3,8 @@ set -euo pipefail
 echo "===== SSV Setup Script Started on $(date) ====="
 
 echo "===== Load or Create Config File  ====="
+# Set this variable in your configuration (or here) to the expected repository directory.
+SSV_REPO_DIR="/home/yourusername/wyoming-satellite"
 
 
 load_configuration() {
@@ -175,8 +177,14 @@ EOL
 
 # Install ReSpeaker drivers (inside Wyoming Satellite directory)
 echo "===== Installing ReSpeaker Drivers ====="
-cd ~/wyoming-satellite/
-sudo bash etc/install-respeaker-drivers.sh || true
+echo "===== Installing ReSpeaker Drivers ====="
+if [ -d "$SSV_REPO_DIR" ]; then
+    cd "$SSV_REPO_DIR" || { echo "Failed to change directory to $SSV_REPO_DIR"; exit 1; }
+    sudo bash etc/install-respeaker-drivers.sh || echo "Warning: ReSpeaker driver installation encountered an error, but continuing..."
+else
+    echo "Error: Wyoming Satellite repository not found at $SSV_REPO_DIR. Skipping ReSpeaker driver installation."
+fi
+
 .venv/bin/pip3 install --upgrade pip
 .venv/bin/pip3 install --upgrade wheel setuptools
 .venv/bin/pip3 install \
