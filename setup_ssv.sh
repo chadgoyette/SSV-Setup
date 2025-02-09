@@ -119,7 +119,6 @@ install_wyoming_satellite() {
 
   # Install additional dependencies for ReSpeaker 2-Mic HAT
   pip install pyaudio numpy
-  deactivate
 
   # Create the configuration file for Wyoming Satellite
   CONFIG_FILE="$HOME/wyoming-satellite/config.yml"
