@@ -1,4 +1,37 @@
 #!/bin/bash
+set -euo pipefail
+
+
+echo "===== Creating Config File  ====="
+
+# Define where the configuration file will reside
+CONFIG_FILE="$HOME/ssv_config.cfg"
+
+# Check if the configuration file exists; if not, create it with default settings.
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "Configuration file not found. Creating default configuration at $CONFIG_FILE..."
+  cat <<EOL > "$CONFIG_FILE"
+# SSV Device Configuration File
+# Adjust these values as needed per device.
+
+# Swap file size (e.g., 2G for SSV2)
+SWAP_SIZE="2G"
+
+# Audio device identifiers for arecord and aplay commands
+ARECORD_DEVICE="plughw:CARD=seeed2micvoicec,DEV=0"
+APLAY_DEVICE="plughw:CARD=seeed2micvoicec,DEV=0"
+
+# Snapclient hostname; using the device's hostname by default
+SNAPCLIENT_HOSTNAME="$(hostname)"
+EOL
+  echo "Default configuration file created."
+fi
+
+# Load the configuration parameters so they can be used throughout the script.
+source "$CONFIG_FILE"
+
+
+
 
 HOSTNAME=$(hostname)
 USERNAME=$(whoami)
@@ -11,13 +44,23 @@ echo "===== SSV Setup Script Started on $(date) ====="
 # Update package lists and upgrade system
 sudo apt update -y
 sudo apt upgrade -y
+echo "===== SSV Setup Script Started on $(date) ====="
 
-# Ensure swap size is adequate
-sudo fallocate -l 1G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-sudo bash -c 'echo "/swapfile none swap sw 0 0" >> /etc/fstab'
+# Ensure swap size is adequate (using 2GB as per SSV2 configuration)
+if [ ! -f "/swapfile" ]; then
+  echo "Creating 2GB swap file..."
+  sudo fallocate -l 2G /swapfile
+  sudo chmod 600 /swapfile
+  sudo mkswap /swapfile
+  sudo swapon /swapfile
+  # Append to /etc/fstab only if not already present
+  if ! grep -q "/swapfile" /etc/fstab; then
+    sudo bash -c 'echo "/swapfile none swap sw 0 0" >> /etc/fstab'
+  fi
+else
+  echo "Swap file already exists; verifying size..."
+  # Optionally, add logic here to verify or adjust swap file size if needed.
+fi
 
 # Step 1: Clone Necessary Repositories
 echo "===== Cloning Necessary Repositories ====="
@@ -184,7 +227,7 @@ echo "===== Installing Local Wake Word Detection ====="
 # Step 2: Install Local Wake Word Detection (openWakeWord)
 echo "Installing local wake word detection (openWakeWord)..."
 
-echo "===== Inmstalling OpenWW Dependencies ====="
+echo "===== Installing OpenWW Dependencies ====="
 
 # Install necessary dependencies
 sudo apt-get update
@@ -287,7 +330,8 @@ echo "===== Starting PulseAudio Installation ======="
 
 # Stop Wyoming Satellite and LED services before modifying PulseAudio
 sudo systemctl stop wyoming-satellite || true
-sudo systemctl stop led-service || true
+sudo systemctl stop 2mic_leds.service || true
+
 echo "===== Stoping Wyoming Service for PulseAudio Installation ======="
 # Step 2: Install PulseAudio and Dependencies
 sudo apt-get update
@@ -320,6 +364,7 @@ EOL
 fi
 
 # Restart PulseAudio to apply changes
+sudo systemctl daemon-reload
 sudo systemctl restart pulseaudio.service
 
 echo "✅ PulseAudio autospawn setting configured successfully."
@@ -387,6 +432,7 @@ else
 fi
 
 # Restart PulseAudio to apply changes
+sudo systemctl daemon-reload
 sudo systemctl restart pulseaudio.service
 
 echo "✅ PulseAudio volume ducking configured successfully."
@@ -416,7 +462,7 @@ if ! command -v snapclient &> /dev/null; then
     echo "❌ ERROR: Snapclient installation failed."
     exit 1
 fi
-
+sudo systemctl daemon-reload
 sudo systemctl enable snapclient
 sudo systemctl start snapclient
 
