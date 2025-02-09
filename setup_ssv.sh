@@ -195,7 +195,7 @@ if [ -d "$SSV_REPO_DIR" ]; then
 else
     echo "Error: Wyoming Satellite repository not found at $SSV_REPO_DIR. Skipping ReSpeaker driver installation."
 fi
-
+python3 -m venv .venv
 .venv/bin/pip3 install --upgrade pip
 .venv/bin/pip3 install --upgrade wheel setuptools
 .venv/bin/pip3 install \
