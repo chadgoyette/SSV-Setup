@@ -1,41 +1,30 @@
 #!/bin/bash
 set -euo pipefail
+echo "===== SSV Setup Script Started on $(date) ====="
+
+echo "===== Load or Create Config File  ====="
 
 
-echo "===== Creating Config File  ====="
-
-# Define where the configuration file will reside
-CONFIG_FILE="$HOME/ssv_config.cfg"
-
-# Check if the configuration file exists; if not, create it with default settings.
-if [ ! -f "$CONFIG_FILE" ]; then
-  echo "Configuration file not found. Creating default configuration at $CONFIG_FILE..."
-  cat <<EOL > "$CONFIG_FILE"
-# SSV Device Configuration File
-# Adjust these values as needed per device.
-
-# Swap file size (e.g., 2G for SSV2)
+load_configuration() {
+  CONFIG_FILE="$HOME/ssv_config.cfg"
+  if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Configuration file not found. Creating default configuration at $CONFIG_FILE..."
+    cat <<EOL > "$CONFIG_FILE"
 SWAP_SIZE="2G"
-
-# Audio device identifiers for arecord and aplay commands
 ARECORD_DEVICE="plughw:CARD=seeed2micvoicec,DEV=0"
 APLAY_DEVICE="plughw:CARD=seeed2micvoicec,DEV=0"
-
-# Snapclient hostname; using the device's hostname by default
 SNAPCLIENT_HOSTNAME="$(hostname)"
 EOL
-  echo "Default configuration file created."
-fi
-
-# Load the configuration parameters so they can be used throughout the script.
-source "$CONFIG_FILE"
-
-echo "Loaded configuration:"
-echo "  SWAP_SIZE: $SWAP_SIZE"
-echo "  ARECORD_DEVICE: $ARECORD_DEVICE"
-echo "  APLAY_DEVICE: $APLAY_DEVICE"
-echo "  SNAPCLIENT_HOSTNAME: $SNAPCLIENT_HOSTNAME"
-
+    echo "Default configuration file created."
+  fi
+  source "$CONFIG_FILE"
+  
+  echo "Loaded configuration:"
+  echo "  SWAP_SIZE: $SWAP_SIZE"
+  echo "  ARECORD_DEVICE: $ARECORD_DEVICE"
+  echo "  APLAY_DEVICE: $APLAY_DEVICE"
+  echo "  SNAPCLIENT_HOSTNAME: $SNAPCLIENT_HOSTNAME"
+}
 
 
 HOSTNAME=$(hostname)
@@ -44,28 +33,28 @@ LOG_FILE="/var/log/ssv_setup.log"
 
 exec > >(tee -a $LOG_FILE) 2>&1
 
-echo "===== SSV Setup Script Started on $(date) ====="
 
 # Update package lists and upgrade system
 sudo apt update -y
 sudo apt upgrade -y
-echo "===== SSV Setup Script Started on $(date) ====="
 
-# Ensure swap size is adequate (using 2GB as per SSV2 configuration)
-if [ ! -f "/swapfile" ]; then
-  echo "Creating 2GB swap file..."
-  sudo fallocate -l $SWAP_SIZE /swapfile
-  sudo chmod 600 /swapfile
-  sudo mkswap /swapfile
-  sudo swapon /swapfile
-  # Append to /etc/fstab only if not already present
-  if ! grep -q "/swapfile" /etc/fstab; then
-    sudo bash -c 'echo "/swapfile none swap sw 0 0" >> /etc/fstab'
+echo "===== Swap Function  ====="
+
+setup_swap() {
+  echo "===== Setting up swap ====="
+  if [ ! -f "/swapfile" ]; then
+    echo "Creating swap file of size $SWAP_SIZE..."
+    sudo fallocate -l "$SWAP_SIZE" /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    if ! grep -q "/swapfile" /etc/fstab; then
+      sudo bash -c 'echo "/swapfile none swap sw 0 0" >> /etc/fstab'
+    fi
+  else
+    echo "Swap file already exists; skipping creation."
   fi
-else
-  echo "Swap file already exists; verifying size..."
-  # Optionally, add logic here to verify or adjust swap file size if needed.
-fi
+}
 
 # Step 1: Clone Necessary Repositories
 echo "===== Cloning Necessary Repositories ====="
@@ -89,53 +78,101 @@ for REPO_URL in "${!REPOS[@]}"; {
 
 
 # Step 1: Install Wyoming Satellite (Following the Official Tutorial)
-echo "===== Installing Wyoming Satellite ====="
+echo "===== Running Wyoming Satellite Function ====="
+install_wyoming_satellite() {
+  echo "===== Installing Wyoming Satellite ====="
+  
+  # Ensure dependencies are installed
+  sudo apt install -y python3 python3-venv python3-pip portaudio19-dev flac
 
-echo "===== Installing Depenencies ====="
+  # Clone the Wyoming Satellite repository if not present
+  if [ ! -d "$HOME/wyoming-satellite" ]; then
+    echo "Cloning Wyoming Satellite repository..."
+    git clone https://github.com/rhasspy/wyoming-satellite.git ~/wyoming-satellite
+  fi
 
-# Ensure dependencies are installed
-sudo apt install -y python3 python3-venv python3-pip portaudio19-dev flac
+  cd ~/wyoming-satellite || exit
 
-echo "===== Navigating to Wyoming-Satellite Directory ====="
-
-# Navigate into the directory
-cd ~/wyoming-satellite || exit
-
-echo "===== Removing any Existing Virtual Environment ====="
-
-# Remove existing virtual environment if it's owned by root
-if [ -d "$HOME/wyoming-satellite/.venv" ]; then
+  # Remove virtual environment if owned by root
+  if [ -d "$HOME/wyoming-satellite/.venv" ]; then
     OWNER=$(stat -c '%U' "$HOME/wyoming-satellite/.venv")
-    if [ "$OWNER" != "$USERNAME" ]; then
-        echo "Removing .venv due to incorrect ownership..."
-        sudo rm -rf "$HOME/wyoming-satellite/.venv"
+    if [ "$OWNER" != "$(whoami)" ]; then
+      echo "Removing .venv due to incorrect ownership..."
+      sudo rm -rf "$HOME/wyoming-satellite/.venv"
     fi
-fi
+  fi
 
-echo "===== Creating a New Virtual Environment ====="
+  # Create a new Python virtual environment
+  echo "Creating a new Python virtual environment..."
+  python3 -m venv .venv
+  source .venv/bin/activate
 
-# Create a new virtual environment under the correct user
-echo "Creating a new Python virtual environment..."
-python3 -m venv .venv
-source .venv/bin/activate
+  # Install dependencies
+  echo "Installing Wyoming Satellite dependencies..."
+  pip install --upgrade pip
+  pip install -r requirements.txt
+  deactivate
+
+  # Install Boost manually
+  pip install boost
+  export BOOST_INCLUDEDIR=/usr/include/boost
+
+  # Install additional dependencies for ReSpeaker 2-Mic HAT
+  pip install pyaudio numpy
+  deactivate
+
+  # Create the configuration file for Wyoming Satellite
+  CONFIG_FILE="$HOME/wyoming-satellite/config.yml"
+  cat <<EOL > "$CONFIG_FILE"
+server:
+  bind: 0.0.0.0
+  port: 10300
+audio:
+  frame-width: 512
+  sampling-rate: 16000
+  sample-format: s16le
+  channels: 1
+EOL
+
+  # Create or update the systemd service for Wyoming Satellite
+  SERVICE_FILE="/etc/systemd/system/wyoming-satellite.service"
+  if [ -f "$SERVICE_FILE" ]; then
+    sudo rm "$SERVICE_FILE"
+  fi
+
+  cat <<EOL | sudo tee "$SERVICE_FILE"
+[Unit]
+Description=Wyoming Satellite
+Wants=network-online.target
+After=network-online.target
+Requires=wyoming-openwakeword.service
+Requires=2mic_leds.service
+[Service]
+Type=simple
+ExecStart=/home/$(whoami)/wyoming-satellite/script/run \
+ --name '$(whoami)' \
+ --uri 'tcp://0.0.0.0:10700' \
+ --mic-command "arecord -D $ARECORD_DEVICE -r 16000 -c 1 -f S16_LE -t raw" \
+ --snd-command "aplay -D $APLAY_DEVICE -r 22050 -c 1 -f S16_LE -t raw" \
+ --wake-uri 'tcp://127.0.0.1:10400' \
+ --wake-word-name 'hey_jarvis' \
+ --event-uri 'tcp://127.0.0.1:10500'
+WorkingDirectory=/home/$(whoami)/wyoming-satellite
+Restart=always
+RestartSec=1
+User=$(whoami)
+[Install]
+WantedBy=default.target
+EOL
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable wyoming-satellite
+  sudo systemctl restart wyoming-satellite
+
+  echo "===== Wyoming Satellite Installation Complete ====="
+}
 
 
-# Install Wyoming Satellite from GitHub
-pip install --no-cache-dir --force-reinstall git+https://github.com/rhasspy/wyoming-satellite.git
-# Install dependencies
-echo "Installing Wyoming Satellite dependencies..."
-pip install --upgrade pip
-pip install -r requirements.txt
-pip install pyring_buffer
-pip install wyoming
-
-# Verify installation
-if ! python -c "import importlib.metadata; print(importlib.metadata.version('wyoming-satellite'))" &>/dev/null; then
-    echo "❌ ERROR: Wyoming Satellite installation failed."
-    exit 1
-else
-    echo "✅ Wyoming Satellite installed successfully."
-fi
 
 # Install ReSpeaker drivers (inside Wyoming Satellite directory)
 echo "===== Installing ReSpeaker Drivers ====="
@@ -229,97 +266,90 @@ EOL
 
 echo "===== Installing Local Wake Word Detection ====="
 
-# Step 2: Install Local Wake Word Detection (openWakeWord)
-echo "Installing local wake word detection (openWakeWord)..."
+install_wakeword() {
+  echo "===== Installing local wake word detection (openWakeWord) ====="
+  
+  # Install dependencies for openWakeWord
+  sudo apt-get update
+  sudo apt-get install --no-install-recommends -y libopenblas-dev
 
-echo "===== Installing OpenWW Dependencies ====="
+  # Clone the repository if not present
+  if [ ! -d "$HOME/wyoming-openwakeword" ]; then
+    git clone https://github.com/rhasspy/wyoming-openwakeword.git "$HOME/wyoming-openwakeword"
+  fi
 
-# Install necessary dependencies
-sudo apt-get update
-sudo apt-get install --no-install-recommends -y libopenblas-dev
+  cd "$HOME/wyoming-openwakeword" || exit
+  script/setup
 
-echo "===== Navigating into the new directory ====="
-
-# Navigate into the directory
-cd ~/wyoming-openwakeword || exit
-script/setup
-
-# Create systemd service for openWakeWord
-WAKEWORD_SERVICE_FILE="/etc/systemd/system/wyoming-openwakeword.service"
-if [ -f "$WAKEWORD_SERVICE_FILE" ]; then
+  # Create or update the systemd service file for openWakeWord
+  WAKEWORD_SERVICE_FILE="/etc/systemd/system/wyoming-openwakeword.service"
+  if [ -f "$WAKEWORD_SERVICE_FILE" ]; then
     sudo rm "$WAKEWORD_SERVICE_FILE"
-fi
+  fi
 
-
-echo "===== Creating the Systemd Service for OpenWW ====="
-
-# Create systemd service for openWakeWord
-cat <<EOL | sudo tee "$WAKEWORD_SERVICE_FILE"
+  cat <<EOL | sudo tee "$WAKEWORD_SERVICE_FILE"
 [Unit]
 Description=Wyoming openWakeWord
-
 [Service]
 Type=simple
-ExecStart=/home/$USERNAME/wyoming-openwakeword/script/run --uri 'tcp://127.0.0.1:10400'
-WorkingDirectory=/home/$USERNAME/wyoming-openwakeword
+ExecStart=$HOME/wyoming-openwakeword/script/run --uri 'tcp://127.0.0.1:10400'
+WorkingDirectory=$HOME/wyoming-openwakeword
 Restart=always
 RestartSec=1
-
 [Install]
 WantedBy=default.target
 EOL
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable wyoming-openwakeword
+  sudo systemctl restart wyoming-openwakeword
+
+  echo "===== openWakeWord Installation Complete ====="
+}
 
 echo "===== Configuring the LED Service ====="
 
-# Step: Install and Configure LED Service for ReSpeaker 2Mic HAT
-echo "Setting up LED service for ReSpeaker 2Mic HAT..."
+install_led_service() {
+  echo "===== Setting up LED service for ReSpeaker 2-Mic HAT ====="
+  
+  cd "$HOME/wyoming-satellite/examples" || exit
 
-# Navigate to the Wyoming Satellite examples directory
-cd ~/wyoming-satellite/examples || exit
-
-echo "===== Setting up VM for LED service ====="
-
-# Set up a Python virtual environment for the LED service
-python3 -m venv --system-site-packages .venv
-.venv/bin/pip3 install --upgrade pip
-.venv/bin/pip3 install --upgrade wheel setuptools
-.venv/bin/pip3 install 'wyoming==1.5.2'
-
-echo "===== Installing Dependencies ====="
-
-# Install additional dependencies if required
-sudo apt-get install -y python3-spidev python3-gpiozero
-
-echo "===== Testing the Service ====="
-
-# Test the service to ensure it runs correctly
-.venv/bin/python3 2mic_service.py --help
-
-echo "===== Cleaning up any old service file ====="
-
-# Remove existing LED service file if it exists
-LED_SERVICE_FILE="/etc/systemd/system/2mic_leds.service"
-if [ -f "$LED_SERVICE_FILE" ]; then
+  # Create a Python virtual environment for the LED service
+  python3 -m venv --system-site-packages .venv
+  .venv/bin/pip3 install --upgrade pip wheel setuptools
+  .venv/bin/pip3 install 'wyoming==1.5.2'
+  
+  # Install additional dependencies for LED control
+  sudo apt-get install -y python3-spidev python3-gpiozero
+  
+  # Test the LED service script
+  .venv/bin/python3 2mic_service.py --help
+  
+  # Remove any existing systemd service file for LED service
+  LED_SERVICE_FILE="/etc/systemd/system/2mic_leds.service"
+  if [ -f "$LED_SERVICE_FILE" ]; then
     sudo rm "$LED_SERVICE_FILE"
-fi
+  fi
 
-echo "===== Creating the new service file ====="
-
-# Create systemd service for LED control
-cat <<EOL | sudo tee "$LED_SERVICE_FILE"
+  cat <<EOL | sudo tee "$LED_SERVICE_FILE"
 [Unit]
 Description=2Mic LEDs
-
 [Service]
 Type=simple
-ExecStart=/home/$USERNAME/wyoming-satellite/examples/.venv/bin/python3 2mic_service.py --uri 'tcp://127.0.0.1:10500'
-WorkingDirectory=/home/$USERNAME/wyoming-satellite/examples
+ExecStart=$HOME/wyoming-satellite/examples/.venv/bin/python3 2mic_service.py --uri 'tcp://127.0.0.1:10500'
+WorkingDirectory=$HOME/wyoming-satellite/examples
 Restart=always
 RestartSec=1
-
 [Install]
 WantedBy=default.target
 EOL
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable 2mic_leds.service
+  sudo systemctl restart 2mic_leds.service
+
+  echo "===== LED Service Setup Complete ====="
+}
 
 
 echo "===== Reloading the WYoming-Satellite Service ====="
@@ -338,76 +368,28 @@ sudo systemctl stop wyoming-satellite || true
 sudo systemctl stop 2mic_leds.service || true
 
 echo "===== Stoping Wyoming Service for PulseAudio Installation ======="
-# Step 2: Install PulseAudio and Dependencies
-sudo apt-get update
-sudo apt-get install -y pulseaudio pulseaudio-utils git wget curl alsa-utils python3 python3-pip jq libasound2 avahi-daemon libboost-all-dev
-echo "===== Completed Installing PA Dependencies ======="
-echo "===== Adding Users and Group For System Mode ======="
-# Add pulse user and group for system mode
-sudo groupadd -r pulse
-sudo useradd -r -g pulse -G audio -d /var/run/pulse pulse
-sudo usermod -aG pulse-access $USERNAME
-echo "===== Configuring PA for System Mode ======="
 
-sudo systemctl --global disable pulseaudio.service pulseaudio.socket
-echo "===== Configuring PulseAudio autospawn setting ====="
 
-# Ensure the PulseAudio client.conf file exists
-sudo touch /etc/pulse/client.conf
+configure_pulseaudio() {
+  echo "===== Configuring PulseAudio in system-wide mode ====="
+  sudo apt install -y pulseaudio pulseaudio-utils git wget curl alsa-utils python3-pip jq libasound2 avahi-daemon libboost-all-dev
+  sudo groupadd -r pulse || true
+  sudo useradd -r -g pulse -G audio -d /var/run/pulse pulse || true
+  sudo usermod -aG pulse-access "$(whoami)"
 
-# Check if autospawn is already set in the file
-if grep -q "^autospawn" /etc/pulse/client.conf; then
-    echo "Updating autospawn setting in /etc/pulse/client.conf..."
-    sudo sed -i 's/^autospawn.*/autospawn = no/' /etc/pulse/client.conf
-else
-    echo "Adding autospawn setting to /etc/pulse/client.conf..."
-    sudo tee -a /etc/pulse/client.conf > /dev/null <<EOL
-
-### Disable PulseAudio autospawn
-autospawn = no
-EOL
-fi
-
-# Restart PulseAudio to apply changes
-sudo systemctl daemon-reload
-sudo systemctl restart pulseaudio.service
-
-echo "✅ PulseAudio autospawn setting configured successfully."
-
-# Configure PulseAudio for system mode
-sudo mkdir -p /etc/pulse
-sudo tee /etc/pulse/system.pa <<EOL
+  sudo mkdir -p /etc/pulse
+  sudo tee /etc/pulse/system.pa <<EOL
 #!/usr/bin/pulseaudio -nF
 load-module module-native-protocol-unix
 load-module module-udev-detect
 load-module module-alsa-sink device=hw:1,0 sink_name=seeed_sink
 load-module module-always-sink
 EOL
+  sudo chmod 644 /etc/pulse/system.pa
+  sudo systemctl restart pulseaudio
 
-
-echo "===== Configuring PulseAudio System Service ====="
-
-# Create or overwrite the PulseAudio systemd service
-sudo tee /etc/systemd/system/pulseaudio.service > /dev/null <<EOL
-[Unit]
-Description=PulseAudio system server
-
-[Service]
-Type=notify
-ExecStart=/usr/bin/pulseaudio --daemonize=no --system --realtime --log-target=journal
-
-[Install]
-WantedBy=multi-user.target
-EOL
-
-# Reload systemd to apply changes
-sudo systemctl daemon-reload
-
-# Enable and restart PulseAudio service
-sudo systemctl enable pulseaudio.service
-sudo systemctl restart pulseaudio.service
-
-echo "✅ PulseAudio system service configured successfully."
+  echo "===== PulseAudio Configuration Complete ====="
+}
 
 echo "===== Setting Permissions and Restarting PA ======="
 # Set permissions and restart PulseAudio
@@ -451,95 +433,83 @@ if [ ! -d "$HOME/wyoming-enhancements" ]; then
 fi
 
 echo "===== Installing Snapcast Client...This will be fun! ======="
-# Step 4: Install Snapcast from GitHub Release
-SNAP_VERSION="0.31.0"
-SNAP_URL="https://github.com/badaix/snapcast/releases/download/v${SNAP_VERSION}/snapclient_${SNAP_VERSION}-1_armhf_bookworm_with-pulse.deb"
+install_snapclient() {
+  echo "===== Installing Snapclient ====="
+  
+  SNAP_VERSION="0.31.0"
+  SNAP_URL="https://github.com/badaix/snapcast/releases/download/v${SNAP_VERSION}/snapclient_${SNAP_VERSION}-1_armhf_bookworm_with-pulse.deb"
 
-if ! command -v snapclient &> /dev/null; then
-    echo "Downloading and installing Snapcast..."
+  if ! command -v snapclient &> /dev/null; then
+    echo "Downloading and installing Snapclient..."
     wget -O snapclient.deb "$SNAP_URL"
     sudo dpkg -i snapclient.deb
     sudo apt --fix-broken install -y
     rm -f snapclient.deb
-fi
+  fi
 
-if ! command -v snapclient &> /dev/null; then
+  if ! command -v snapclient &> /dev/null; then
     echo "❌ ERROR: Snapclient installation failed."
     exit 1
-fi
-sudo systemctl daemon-reload
-sudo systemctl enable snapclient
-sudo systemctl start snapclient
+  fi
 
-# Ensure Snapcast service uses the correct hostname
-SNAPCAST_CONFIG="/etc/default/snapclient"
-cat <<EOL | sudo tee "$SNAPCAST_CONFIG"
-SNAPCLIENT_OPTS="-h localhost -s $HOSTNAME"
+  sudo systemctl enable snapclient
+  sudo systemctl start snapclient
+
+  # Configure Snapclient to use the correct hostname
+  SNAPCAST_CONFIG="/etc/default/snapclient"
+  cat <<EOL | sudo tee "$SNAPCAST_CONFIG"
+SNAPCLIENT_OPTS="-h localhost -s $SNAPCLIENT_HOSTNAME"
 EOL
+  sudo systemctl restart snapclient
 
-sudo systemctl restart snapclient
+  echo "===== Snapclient Installation Complete ====="
+}
+
+
 echo "===== Applying the Wyoming Enhancements ======="
-# Step 5: Apply Wyoming Enhancements Modifications
-sudo cp /etc/systemd/system/wyoming-satellite.service /etc/systemd/system/enhanced-wyoming-satellite.service
+apply_wyoming_enhancements() {
+  echo "===== Applying Wyoming Enhancements ====="
+  
+  if [ ! -d "$HOME/wyoming-enhancements" ]; then
+    echo "Cloning Wyoming Enhancements repository..."
+    git clone https://github.com/FutureProofHomes/wyoming-enhancements.git "$HOME/wyoming-enhancements"
+  fi
 
+  MODIFY_WYOMING_SCRIPT="$HOME/wyoming-enhancements/snapcast/modify_wyoming_satellite.sh"
+  if [ -f "$MODIFY_WYOMING_SCRIPT" ]; then
+    echo "Applying modifications via Wyoming Enhancements..."
+    bash "$MODIFY_WYOMING_SCRIPT"
+  else
+    echo "Modification script not found; skipping enhancements."
+  fi
 
-echo "===== Configuring Enhanced Wyoming Satellite Service ====="
-
-SERVICE_FILE="/etc/systemd/system/enhanced-wyoming-satellite.service"
-
-# Remove existing service file if it exists
-if [ -f "$SERVICE_FILE" ]; then
-    echo "Removing old enhanced Wyoming Satellite service..."
-    sudo rm "$SERVICE_FILE"
-fi
-
-# Create the new enhanced service file
-sudo tee "$SERVICE_FILE" > /dev/null <<EOL
-[Unit]
-Description=Enhanced Wyoming Satellite
-Wants=network-online.target
-After=network-online.target
-Requires=wyoming-openwakeword.service
-Requires=2mic_leds.service
-Requires=pulseaudio.service
-
-[Service]
-Type=simple
-ExecStart=/home/$USERNAME/wyoming-satellite/script/run \
-    --name '$USERNAME' \
-    --uri 'tcp://0.0.0.0:10700' \
-    --mic-command 'parecord --property=media.role=phone --rate=16000 --channels=1 --format=s16le --raw --latency-msec 10' \
-    --snd-command 'paplay --property=media.role=announce --rate=44100 --channels=1 --format=s16le --raw --latency-msec 10' \
-    --snd-command-rate 44100 \
-    --snd-volume-multiplier 0.1 \
-    --mic-auto-gain 7 \
-    --mic-noise-suppression 3 \
-    --wake-uri 'tcp://127.0.0.1:10400' \
-    --wake-word-name 'hey_jarvis' \
-    --event-uri 'tcp://127.0.0.1:10500' \
-    --detection-command '/home/$USERNAME/wyoming-enhancements/snapcast/scripts/awake.sh' \
-    --tts-stop-command '/home/$USERNAME/wyoming-enhancements/snapcast/scripts/done.sh' \
-    --error-command '/home/$USERNAME/wyoming-enhancements/snapcast/scripts/done.sh' \
-    --awake-wav sounds/awake.wav \
-    --done-wav sounds/done.wav
-WorkingDirectory=/home/$USERNAME/wyoming-satellite
-Restart=always
-RestartSec=1
-
-[Install]
-WantedBy=default.target
-EOL
-
-# Reload systemd to apply changes
-sudo systemctl daemon-reload
-
-# Enable and restart the enhanced Wyoming Satellite service
-sudo systemctl enable enhanced-wyoming-satellite.service
-sudo systemctl restart enhanced-wyoming-satellite.service
-
-echo "✅ Enhanced Wyoming Satellite service configured successfully."
-
-echo "===== Restarting the Wyoming-Satellite Service ======="
-sudo systemctl restart wyoming-satellite
+  sudo systemctl restart wyoming-satellite
+  echo "===== Wyoming Enhancements Applied ====="
+}
 
 echo "===== SSV Setup Completed Successfully on $(date) ====="
+
+
+
+main() {
+  echo "===== SSV Setup Script Started on $(date) ====="
+  
+  # Load configuration
+  load_configuration
+  
+  # Setup swap file
+  setup_swap
+  
+  # Install Wyoming Satellite
+  install_wyoming_satellite
+  
+  # Configure PulseAudio
+  configure_pulseaudio
+  
+  # (Call other functions here, e.g., install_wakeword, setup_led_service, install_snapclient, etc.)
+  
+  echo "===== SSV Setup Completed Successfully on $(date) ====="
+}
+
+# Execute main function
+main
