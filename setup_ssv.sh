@@ -180,8 +180,8 @@ WantedBy=default.target
 EOL
 
   sudo systemctl daemon-reload
-  sudo systemctl enable wyoming-satellite
-  sudo systemctl restart wyoming-satellite
+ # sudo systemctl enable wyoming-satellite
+ # sudo systemctl restart wyoming-satellite
 
   echo "===== Wyoming Satellite Installation Complete ====="
 }
