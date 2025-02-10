@@ -164,8 +164,8 @@ Type=simple
 ExecStart=/home/$(whoami)/wyoming-satellite/script/run \
  --name '$(whoami)' \
  --uri 'tcp://0.0.0.0:10700' \
- --mic-command "arecord -D $ARECORD_DEVICE -r 16000 -c 1 -f S16_LE -t raw" \
- --snd-command "aplay -D $APLAY_DEVICE -r 22050 -c 1 -f S16_LE -t raw" \
+ --mic-command "arecord -D ${ARECORD_DEVICE:-plughw:CARD=seeed2micvoicec,DEV=0} -r 16000 -c 1 -f S16_LE -t raw" \
+ --snd-command "aplay -D ${APLAY_DEVICE:-plughw:CARD=seeed2micvoicec,DEV=0} -r 22050 -c 1 -f S16_LE -t raw" \
  --wake-uri 'tcp://127.0.0.1:10400' \
  --wake-word-name 'hey_jarvis' \
  --event-uri 'tcp://127.0.0.1:10500'
@@ -231,63 +231,7 @@ echo "===== Deactivate the Virtual Environment ====="
 # Deactivate the virtual environment
 deactivate
 
-echo "===== Creating the Wyoming Satellite Config FIle ====="
 
-# Create Wyoming Satellite Configuration File
-CONFIG_FILE="$HOME/wyoming-satellite/config.yml"
-cat <<EOL > "$CONFIG_FILE"
-server:
-  bind: 0.0.0.0
-  port: 10300
-
-audio:
-  frame-width: 512
-  sampling-rate: 16000
-  sample-format: s16le
-  channels: 1
-EOL
-
-echo "===== If the file exists removing ====="
-
-# Remove existing Wyoming Satellite service file if it exists
-SERVICE_FILE="/etc/systemd/system/wyoming-satellite.service"
-if [ -f "$SERVICE_FILE" ]; then
-    sudo rm "$SERVICE_FILE"
-fi
-
-echo "===== Creating the Systemd Service ====="
-
-# Create Wyoming Satellite Systemd Service
-SERVICE_FILE="/etc/systemd/system/wyoming-satellite.service"
-sudo rm -f "$SERVICE_FILE"
-cat <<EOL | sudo tee "$SERVICE_FILE"
-[Unit]
-Description=Wyoming Satellite
-Wants=network-online.target
-After=network-online.target
-Requires=wyoming-openwakeword.service
-Requires=2mic_leds.service
-
-[Service]
-Type=simple
-ExecStart=/home/$USERNAME/wyoming-satellite/script/run \
-  --name '$USERNAME' \
-  --uri 'tcp://0.0.0.0:10700' \
-  --mic-command "arecord -D $ARECORD_DEVICE -r 16000 -c 1 -f S16_LE -t raw" \
-  --snd-command "aplay -D $APLAY_DEVICE -r 22050 -c 1 -f S16_LE -t raw" \
-  --wake-uri 'tcp://127.0.0.1:10400' \
-  --wake-word-name 'hey_jarvis' \
-  --event-uri 'tcp://127.0.0.1:10500'
-WorkingDirectory=/home/$USERNAME/wyoming-satellite
-Restart=always
-RestartSec=1
-User=$USERNAME
-
-[Install]
-WantedBy=default.target
-EOL
-
-echo "===== Installing Local Wake Word Detection ====="
 
 install_wakeword() {
   echo "===== Installing local wake word detection (openWakeWord) ====="
@@ -330,7 +274,6 @@ EOL
   echo "===== openWakeWord Installation Complete ====="
 }
 
-echo "===== Configuring the LED Service ====="
 
 install_led_service() {
   echo "===== Setting up LED service for ReSpeaker 2-Mic HAT ====="
