@@ -440,12 +440,24 @@ main() {
   # Install Respeaker Drivers
   install_respeaker_drivers
   
+  #install Wakeword
+  install_wakeword
+ 
+  #Install LED Service
+  install_led_service
+  
   # Install Wyoming Satellite
   install_wyoming_satellite
   
   # Configure PulseAudio
   configure_pulseaudio
   
+  #Install snapclient
+  install_snapclient
+  #
+  
+  #Install Wyoming Enhancements
+  apply_wyoming_enhancements
   # (Call other functions here, e.g., install_wakeword, setup_led_service, install_snapclient, etc.)
   
   echo "===== SSV Setup Completed Successfully on $(date) ====="
