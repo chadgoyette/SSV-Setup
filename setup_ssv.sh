@@ -127,13 +127,13 @@ install_wyoming_satellite() {
       echo "requirements.txt not found, skipping dependency installation."
   fi
 
-  deactivate
 #  # Install Boost manually
 #  pip install boost
 #  export BOOST_INCLUDEDIR=/usr/include/boost
 
   # Install additional dependencies for ReSpeaker 2-Mic HAT
   pip install pyaudio numpy
+deactivate
 
   # Create the configuration file for Wyoming Satellite
   CONFIG_FILE="$HOME/wyoming-satellite/config.yml"
