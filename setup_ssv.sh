@@ -45,7 +45,6 @@ LOG_FILE="$USER_HOME/ssv_setup.log"
 # Redirect stdout and stderr to the log file (append mode)
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-echo "===== SSV Setup Script Started on $(date) ====="
 
 # Update package lists and upgrade system
 sudo apt update -y
@@ -73,10 +72,10 @@ setup_swap() {
 echo "===== Cloning Necessary Repositories ====="
 
 # Define repositories and their target directories
-declare -A REPOS=(
-    ["https://github.com/rhasspy/wyoming-openwakeword.git"]="$HOME/wyoming-openwakeword"
-    ["https://github.com/FutureProofHomes/wyoming-enhancements.git"]="$HOME/wyoming-enhancements"
-)
+#declare -A REPOS=(
+#    ["https://github.com/rhasspy/wyoming-openwakeword.git"]="$HOME/wyoming-openwakeword"
+#    ["https://github.com/FutureProofHomes/wyoming-enhancements.git"]="$HOME/wyoming-enhancements"
+#)
 
 # Clone repositories if they don't already exist
 for REPO_URL in "${!REPOS[@]}"; {
@@ -340,10 +339,6 @@ EOL
   echo "===== PulseAudio Configuration Complete ====="
 }
 
-echo "===== Setting Permissions and Restarting PA ======="
-# Set permissions and restart PulseAudio
-sudo chmod 644 /etc/pulse/system.pa
-sudo systemctl restart pulseaudio
 
 
 echo "=====************************************************* Testing Audio ******************************************************** ======="
