@@ -120,7 +120,13 @@ install_wyoming_satellite() {
   # Install dependencies
   echo "Installing Wyoming Satellite dependencies..."
   pip install --upgrade pip
-  pip install -r requirements.txt
+  if [ -f requirements.txt ]; then
+      echo "requirements.txt found, installing dependencies..."
+      pip install --break-system-packages -r requirements.txt
+  else
+      echo "requirements.txt not found, skipping dependency installation."
+  fi
+
   deactivate
 
   # Install Boost manually
