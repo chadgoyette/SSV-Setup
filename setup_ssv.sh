@@ -50,10 +50,9 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 sudo apt update -y
 sudo apt upgrade -y
 
-echo "===== Swap Function  ====="
 
 setup_swap() {
-  echo "===== Setting up swap ====="
+  echo "===== Setting up swap Function ====="
   if [ ! -f "/swapfile" ]; then
     echo "Creating swap file of size $SWAP_SIZE..."
     sudo fallocate -l "$SWAP_SIZE" /swapfile
@@ -69,7 +68,7 @@ setup_swap() {
 }
 
 # Step 1: Clone Necessary Repositories
-echo "===== Cloning Necessary Repositories ====="
+#echo "===== Cloning Necessary Repositories ====="
 
 # Define repositories and their target directories
 #declare -A REPOS=(
@@ -78,21 +77,20 @@ echo "===== Cloning Necessary Repositories ====="
 #)
 
 # Clone repositories if they don't already exist
-for REPO_URL in "${!REPOS[@]}"; {
-    TARGET_DIR="${REPOS[$REPO_URL]}"
-    if [ ! -d "$TARGET_DIR" ]; then
-        echo "Cloning $REPO_URL into $TARGET_DIR..."
-        git clone "$REPO_URL" "$TARGET_DIR"
-    else
-        echo "Repository $REPO_URL already cloned in $TARGET_DIR."
-    fi
-}
+#for REPO_URL in "${!REPOS[@]}"; {
+#    TARGET_DIR="${REPOS[$REPO_URL]}"
+#    if [ ! -d "$TARGET_DIR" ]; then
+#        echo "Cloning $REPO_URL into $TARGET_DIR..."
+#        git clone "$REPO_URL" "$TARGET_DIR"
+#    else
+#        echo "Repository $REPO_URL already cloned in $TARGET_DIR."
+#    fi
+#}
 
 
 # Step 1: Install Wyoming Satellite (Following the Official Tutorial)
-echo "===== Running Wyoming Satellite Function ====="
 install_wyoming_satellite() {
-  echo "===== Installing Wyoming Satellite ====="
+  echo "===== Installing Wyoming Satellite Function ====="
   
   # Ensure dependencies are installed
   sudo apt install -y python3 python3-venv python3-pip portaudio19-dev flac
@@ -184,7 +182,7 @@ EOL
 }
 
 
-
+install_respeaker_drivers(){
 # Install ReSpeaker drivers (inside Wyoming Satellite directory)
 echo "===== Installing ReSpeaker Drivers ====="
 if [ -d "$SSV_REPO_DIR" ]; then
@@ -229,7 +227,7 @@ echo "===== Deactivate the Virtual Environment ====="
 
 # Deactivate the virtual environment
 deactivate
-
+}
 
 
 install_wakeword() {
@@ -368,15 +366,7 @@ sudo systemctl restart pulseaudio.service
 
 echo "✅ PulseAudio volume ducking configured successfully."
 
-echo "===== Installing Wyoming-Enhancements ======="
-echo "===== Are you Bored Yet??????  ======="
-# Step 3: Install Wyoming Enhancements
-if [ ! -d "$HOME/wyoming-enhancements" ]; then
-    echo "Cloning Wyoming Enhancements repository..."
-    git clone https://github.com/FutureProofHomes/wyoming-enhancements.git ~/wyoming-enhancements
-fi
 
-echo "===== Installing Snapcast Client...This will be fun! ======="
 install_snapclient() {
   echo "===== Installing Snapclient ====="
   
@@ -410,7 +400,6 @@ EOL
 }
 
 
-echo "===== Applying the Wyoming Enhancements ======="
 apply_wyoming_enhancements() {
   echo "===== Applying Wyoming Enhancements ====="
   
@@ -431,18 +420,20 @@ apply_wyoming_enhancements() {
   echo "===== Wyoming Enhancements Applied ====="
 }
 
-echo "===== SSV Setup Completed Successfully on $(date) ====="
 
 
 
 main() {
-  echo "===== SSV Setup Script Started on $(date) ====="
+  echo "=====Main() SSV Setup Script Started on $(date) ====="
   
   # Load configuration
   load_configuration
   
   # Setup swap file
   setup_swap
+  
+  # Install Respeaker Drivers
+  install_respeaker_drivers
   
   # Install Wyoming Satellite
   install_wyoming_satellite
