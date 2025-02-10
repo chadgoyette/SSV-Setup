@@ -318,23 +318,6 @@ EOL
 }
 
 
-echo "===== Reloading the WYoming-Satellite Service ====="
-
-# Reload systemd and restart the service
-sudo systemctl daemon-reload
-sudo systemctl enable wyoming-satellite
-sudo systemctl restart wyoming-satellite
-
-echo "===== Wyoming Satellite Installation Complete ====="
-
-echo "===== Starting PulseAudio Installation ======="
-
-# Stop Wyoming Satellite and LED services before modifying PulseAudio
-sudo systemctl stop wyoming-satellite || true
-sudo systemctl stop 2mic_leds.service || true
-
-echo "===== Stoping Wyoming Service for PulseAudio Installation ======="
-
 
 configure_pulseaudio() {
   echo "===== Configuring PulseAudio in system-wide mode ====="
