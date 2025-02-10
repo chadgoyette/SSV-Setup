@@ -196,9 +196,10 @@ else
     echo "Error: Wyoming Satellite repository not found at $SSV_REPO_DIR. Skipping ReSpeaker driver installation."
 fi
 python3 -m venv .venv
-.venv/bin/pip3 install --upgrade pip
-.venv/bin/pip3 install --upgrade wheel setuptools
-.venv/bin/pip3 install \
+echo "===== Upgrading Pip, Wheel, and Setuptools ====="
+pip install --break-system-packages --upgrade pip
+pip install --break-system-packages --upgrade wheel setuptools
+.venv/bin/pip3 install --break-system-packages \
   -f 'https://synesthesiam.github.io/prebuilt-apps/' \
   -e '.[all]'
 script/run --help
@@ -209,12 +210,15 @@ script/run --help
 
 echo "===== Starting system site package VM ====="
 python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
 echo "===== Installing Boost Manually ====="
 
 # Install Boost manually to avoid header path issues
 pip install boost
-BOOST_INCLUDEDIR=/usr/include/boost
-export BOOST_INCLUDEDIR
+echo "===== Installing System Boost Libraries ====="
+sudo apt install -y libboost-all-dev
+echo "===== Exporting BOOST_INCLUDEDIR ====="
+export BOOST_INCLUDEDIR=/usr/include/boost
 
 echo "===== Installing pyaudio numpy for ReSpeaker 2-Mic HAT ====="
 
