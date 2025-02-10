@@ -128,10 +128,9 @@ install_wyoming_satellite() {
   fi
 
   deactivate
-
-  # Install Boost manually
-  pip install boost
-  export BOOST_INCLUDEDIR=/usr/include/boost
+#  # Install Boost manually
+#  pip install boost
+#  export BOOST_INCLUDEDIR=/usr/include/boost
 
   # Install additional dependencies for ReSpeaker 2-Mic HAT
   pip install pyaudio numpy
