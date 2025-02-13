@@ -337,6 +337,50 @@ EOL
     sudo systemctl restart wyoming-satellite
 }
 
+
+install_led_service() {
+  echo "===== Setting up LED service for ReSpeaker 2-Mic HAT ====="
+
+  cd "$HOME/wyoming-satellite/examples" || exit
+
+  # Create a Python virtual environment for the LED service
+  python3 -m venv --system-site-packages .venv
+  .venv/bin/pip3 install --upgrade pip wheel setuptools
+  .venv/bin/pip3 install 'wyoming==1.5.2'
+
+  # Install additional dependencies for LED control
+  sudo apt-get install -y python3-spidev python3-gpiozero
+
+  # Test the LED service script
+  .venv/bin/python3 2mic_service.py --help
+
+  # Remove any existing systemd service file for LED service
+  LED_SERVICE_FILE="/etc/systemd/system/2mic_leds.service"
+  if [ -f "$LED_SERVICE_FILE" ]; then
+    sudo rm "$LED_SERVICE_FILE"
+  fi
+
+  cat <<EOL | sudo tee "$LED_SERVICE_FILE"
+[Unit]
+Description=2Mic LEDs
+[Service]
+Type=simple
+ExecStart=$HOME/wyoming-satellite/examples/.venv/bin/python3 2mic_service.py --uri 'tcp://127.0.0.1:10500'
+WorkingDirectory=$HOME/wyoming-satellite/examples
+Restart=always
+RestartSec=1
+[Install]
+WantedBy=default.target
+EOL
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable 2mic_leds.service
+ # sudo systemctl restart 2mic_leds.service
+
+  echo "===== LED Service Setup Complete ====="
+}
+
+
 # -----------------------------------------------------------------------------
 # Main routine: Calls all functions in sequence.
 # -----------------------------------------------------------------------------
@@ -350,6 +394,7 @@ main() {
     setup_virtualenv
     install_boost
     configure_pulseaudio
+    install_led_service
     install_snapclient
     apply_wyoming_enhancements
     create_systemd_service
