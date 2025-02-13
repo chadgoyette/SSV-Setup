@@ -380,6 +380,47 @@ EOL
   echo "===== LED Service Setup Complete ====="
 }
 
+install_wakeword() {
+  echo "===== Installing local wake word detection (openWakeWord) ====="
+
+  # Install dependencies for openWakeWord
+  sudo apt-get update
+  sudo apt-get install --no-install-recommends -y libopenblas-dev
+
+  # Clone the repository if not present
+  if [ ! -d "$HOME/wyoming-openwakeword" ]; then
+    git clone https://github.com/rhasspy/wyoming-openwakeword.git "$HOME/wyoming-openwakeword"
+  fi
+
+  cd "$HOME/wyoming-openwakeword" || exit
+  script/setup
+
+  # Create or update the systemd service file for openWakeWord
+  WAKEWORD_SERVICE_FILE="/etc/systemd/system/wyoming-openwakeword.service"
+  if [ -f "$WAKEWORD_SERVICE_FILE" ]; then
+    sudo rm "$WAKEWORD_SERVICE_FILE"
+  fi
+
+  cat <<EOL | sudo tee "$WAKEWORD_SERVICE_FILE"
+[Unit]
+Description=Wyoming openWakeWord
+[Service]
+Type=simple
+ExecStart=$HOME/wyoming-openwakeword/script/run --uri 'tcp://127.0.0.1:10400'
+WorkingDirectory=$HOME/wyoming-openwakeword
+Restart=always
+RestartSec=1
+[Install]
+WantedBy=default.target
+EOL
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable wyoming-openwakeword
+ # sudo systemctl restart wyoming-openwakeword
+
+  echo "===== openWakeWord Installation Complete ====="
+}
+
 
 # -----------------------------------------------------------------------------
 # Main routine: Calls all functions in sequence.
@@ -390,6 +431,7 @@ main() {
     setup_swap
     clone_repositories
     install_wyoming_satellite
+    install_wakeword
     install_respeaker_drivers
     setup_virtualenv
     install_boost
