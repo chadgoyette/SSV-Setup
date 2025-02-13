@@ -247,6 +247,46 @@ apply_wyoming_enhancements() {
         echo "Cloning Wyoming Enhancements repository..."
         git clone https://github.com/FutureProofHomes/wyoming-enhancements.git "$HOME/wyoming-enhancements"
     fi
+
+SERVICE_FILE="/etc/systemd/system/enhanced-wyoming-satellite.service"
+sudo rm -f "$SERVICE_FILE"
+cat <<EOL | sudo tee "$SERVICE_FILE"
+[Unit]
+Description=Enhanced Wyoming Satellite
+Wants=network-online.target
+After=network-online.target
+Requires=wyoming-openwakeword.service
+Requires=2mic_leds.service
+Requires=pulseaudio.service
+
+[Service]
+Type=simple
+ExecStart=/home/$USERNAME/wyoming-satellite/script/run \
+  --name '$USERNAME' \
+  --uri 'tcp://0.0.0.0:10700' \
+  --mic-command 'parecord --property=media.role=phone --rate=16000 --channels=1 --format=s16le --raw --latency-msec 10' \
+  --snd-command 'paplay --property=media.role=announce --rate=44100 --channels=1 --format=s16le --raw --latency-msec 10' \
+  --snd-command-rate 44100 \
+  --snd-volume-multiplier 0.1 \
+  --mic-auto-gain 7 \
+  --mic-noise-suppression 3 \
+  --wake-uri 'tcp://127.0.0.1:10400' \
+  --wake-word-name 'hey_jarvis' \
+  --event-uri 'tcp://127.0.0.1:10500'
+  --detection-command '/home/$USERNAME/wyoming-enhancements/snapcast/scripts/awake.sh' \
+  --tts-stop-command '/home/$USERNAME/wyoming-enhancements/snapcast/scripts/done.sh' \
+  --error-command '/home/$USERNAME/wyoming-enhancements/snapcast/scripts/done.sh' \
+  --awake-wav sounds/awake.wav \
+  --done-wav sounds/done.wav
+WorkingDirectory=/home/$USERNAME/wyoming-satellite
+Restart=always
+RestartSec=1
+#User=$USERNAME
+[Install]
+WantedBy=default.target
+
+EOL
+
     MODIFY_WYOMING_SCRIPT="$HOME/wyoming-enhancements/snapcast/modify_wyoming_satellite.sh"
     if [ -f "$MODIFY_WYOMING_SCRIPT" ]; then
         echo "Applying modifications via Wyoming Enhancements..."
@@ -254,7 +294,8 @@ apply_wyoming_enhancements() {
     else
         echo "Modification script not found; skipping enhancements."
     fi
-    sudo systemctl restart wyoming-satellite
+  sudo systemctl enable --now enhanced-wyoming-satellite.service  
+ # sudo systemctl restart wyoming-satellite
 }
 
 # -----------------------------------------------------------------------------
