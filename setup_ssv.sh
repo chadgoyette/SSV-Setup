@@ -228,13 +228,13 @@ install_snapclient() {
         echo "❌ ERROR: Snapclient installation failed."
         exit 1
     fi
-    sudo systemctl enable snapclient
-    sudo systemctl start snapclient
     SNAPCAST_CONFIG="/etc/default/snapclient"
     sudo tee "$SNAPCAST_CONFIG" <<EOL
-SNAPCLIENT_OPTS="-h localhost -s ${SNAPCLIENT_HOSTNAME:-$USERNAME}"
+    SNAPCLIENT_OPTS="--player pulse"
+
 EOL
-    sudo systemctl restart snapclient
+    sudo systemctl enable snapclient
+    sudo systemctl start snapclient    
 }
 
 # -----------------------------------------------------------------------------
