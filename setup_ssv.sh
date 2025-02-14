@@ -251,7 +251,9 @@ install_snapclient() {
     SNAP_URL="https://github.com/badaix/snapcast/releases/download/v${SNAP_VERSION}/snapclient_${SNAP_VERSION}-1_armhf_bookworm_with-pulse.deb"
     if ! command -v snapclient &> /dev/null; then
         echo "Downloading and installing Snapclient..."
-        wget -O snapclient.deb "$SNAP_URL"
+    curl -L -o snapclient.deb "$SNAP_URL"
+       
+   # wget -O snapclient.deb "$SNAP_URL"
         sudo dpkg -i snapclient.deb
         sudo apt --fix-broken install -y
         rm -f snapclient.deb
