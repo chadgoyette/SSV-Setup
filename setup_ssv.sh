@@ -247,6 +247,10 @@ EOL
 # -----------------------------------------------------------------------------
 install_snapclient() {
     echo "===== Installing Snapclient ====="
+    # Ensure required dependencies are installed before Snapclient
+    sudo apt update
+    sudo apt install -y libavahi-client3 libvorbisidec1
+
     SNAP_VERSION="0.31.0"
     SNAP_URL="https://github.com/badaix/snapcast/releases/download/v${SNAP_VERSION}/snapclient_${SNAP_VERSION}-1_arm64_bookworm_with-pulse.deb"
     if ! command -v snapclient &> /dev/null; then
