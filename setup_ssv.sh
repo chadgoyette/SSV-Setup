@@ -281,7 +281,7 @@ ExecStart=/home/$USERNAME/wyoming-satellite/script/run \
 WorkingDirectory=/home/$USERNAME/wyoming-satellite
 Restart=always
 RestartSec=1
-#User=$USERNAME
+User=$USERNAME
 [Install]
 WantedBy=default.target
 
