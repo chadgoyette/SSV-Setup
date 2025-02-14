@@ -206,11 +206,40 @@ set-default-sink seeed_sink
 .endif
 EOL
     sudo chmod 644 /etc/pulse/system.pa
-    systemctl --system enable pulseaudio.service
-    systemctl --system start pulseaudio.service    
-    sudo sed -i '/^pulse-access:/ s/$/root,pi,snapclient,$USERNAME/' /etc/group    
 #sudo systemctl restart pulseaudio
+
 }
+
+
+# -----------------------------------------------------------------------------
+# Function: create systemd service for pulseaudio
+# Description: Creates pulseaudio.service 
+# ----------------------------------------------------------------------------
+create_PA_systemd_service() {
+    echo "===== Creating the Systemd Service ====="
+    SERVICE_FILE="/etc/systemd/system/pulseaudio.service"
+    sudo rm -f "$SERVICE_FILE"
+    sudo tee "$SERVICE_FILE" <<EOL
+
+[Unit]
+Description=PulseAudio system server
+
+[Service]
+Type=notify
+ExecStart=pulseaudio --daemonize=no --system --realtime --log-target=journal
+
+[Install]
+WantedBy=multi-user.target
+
+EOL
+   systemctl --system enable pulseaudio.service
+   systemctl --system start pulseaudio.service
+   sudo sed -i '/^pulse-access:/ s/$/root,pi,snapclient,$USERNAME/' /etc/group
+
+}
+
+
+
 
 # -----------------------------------------------------------------------------
 # Function: install_snapclient
@@ -439,6 +468,7 @@ main() {
     setup_virtualenv
     install_boost
     configure_pulseaudio
+    create_PA_systemd_service
     install_led_service
     install_snapclient
     apply_wyoming_enhancements
