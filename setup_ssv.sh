@@ -206,7 +206,10 @@ set-default-sink seeed_sink
 .endif
 EOL
     sudo chmod 644 /etc/pulse/system.pa
-    sudo systemctl restart pulseaudio
+    systemctl --system enable pulseaudio.service
+    systemctl --system start pulseaudio.service    
+    sudo sed -i '/^pulse-access:/ s/$/root,pi,snapclient,$USERNAME/' /etc/group    
+#sudo systemctl restart pulseaudio
 }
 
 # -----------------------------------------------------------------------------
