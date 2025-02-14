@@ -248,7 +248,7 @@ EOL
 install_snapclient() {
     echo "===== Installing Snapclient ====="
     SNAP_VERSION="0.31.0"
-    SNAP_URL="https://github.com/badaix/snapcast/releases/download/v${SNAP_VERSION}/snapclient_${SNAP_VERSION}-1_armhf_bookworm_with-pulse.deb"
+    SNAP_URL="https://github.com/badaix/snapcast/releases/download/v${SNAP_VERSION}/snapclient_${SNAP_VERSION}-1_arm64_bookworm_with-pulse.deb"
     if ! command -v snapclient &> /dev/null; then
         echo "Downloading and installing Snapclient..."
     curl -L -o snapclient.deb "$SNAP_URL"
