@@ -332,7 +332,14 @@ EOL
     else
         echo "Modification script not found; skipping enhancements."
     fi
-  sudo systemctl enable --now enhanced-wyoming-satellite.service  
+   echo "===== Disabling non-enhanced wyoming-satellite service ====="
+   sudo systemctl stop wyoming-satellite.service || true
+   sudo systemctl disable wyoming-satellite.service || true
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now enhanced-wyoming-satellite.service  
+
+
+
  # sudo systemctl restart wyoming-satellite
 }
 
@@ -478,7 +485,7 @@ main() {
     install_led_service
     install_snapclient
     apply_wyoming_enhancements
-    create_systemd_service
+#    create_systemd_service
     echo "===== SSV Setup Completed Successfully on $(date) ====="
 }
 
